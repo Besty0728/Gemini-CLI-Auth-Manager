@@ -77,7 +77,7 @@ def install():
 
     # 5. Generate Batch Launcher (change.bat)
     # Using %USERPROFILE% for portability
-    bat_content = '@echo off\npython "%USERPROFILE%\.gemini\gemini_auth_manager.py" %*'
+    bat_content = r'@echo off\npython "%USERPROFILE%\.gemini\gemini_auth_manager.py" %*'
     try:
         with open(target_bat_path, 'w', encoding='utf-8') as f:
             f.write(bat_content)
@@ -105,4 +105,10 @@ def install():
     # 7. Success Message
     print("\n" + "="*30)
     print(f"✅ {texts['success']}")
-    print("-
+    print("-" * 30)
+    print(texts['msg_cli'])
+    print(texts['msg_slash'])
+    print("="*30)
+
+if __name__ == "__main__":
+    install()
