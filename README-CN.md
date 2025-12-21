@@ -46,17 +46,21 @@ python install.py
 ```text
 /change 1                # 切换到第 1 个账号
 /change user@gmail.com   # 通过邮箱切换
+/change                  # 列出所有账号
+/change menu             # 打开交互式管理菜单（添加/删除）
 ```
 
 ### 方式 2: Windows 终端（CMD/PowerShell）
 在普通的命令行终端中：
 
 ```bash
-# 打开交互式菜单
-change
+# 列出账号列表
+gchange
 
 # 快速切换
-change 2
+
+gchange 2
+gchange user@gmail.com
 ```
 
 ---

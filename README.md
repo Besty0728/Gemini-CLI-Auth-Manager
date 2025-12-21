@@ -41,22 +41,26 @@ python install.py
 ## 🛠 Usage
 
 ### Option 1: Gemini CLI (Slash Command)
-Inside the Gemini chat interface:
+Inside Gemini chat:
 
 ```text
-/change 1                # Switch to Profile #1
+/change 1                # Switch to account #1
 /change user@gmail.com   # Switch by email
+/change                  # List available accounts
+/change menu             # Open interactive management menu (Add/Delete)
 ```
 
 ### Option 2: Windows Terminal (CMD/PowerShell)
-From your standard command line:
+In your standard terminal:
 
 ```bash
-# Open Interactive Menu
-change
+# List all accounts
+gchange
 
-# Quick Switch
-change 2
+# Switch Account
+gchange 2
+
+gchange user@gmail.com
 ```
 
 ---
