@@ -1,0 +1,13 @@
+# User credentials (Never commit these!)
+oauth_creds.json
+google_accounts.json
+google_account_id
+auth_profiles/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# IDE settings
+.vscode/
+.idea/
