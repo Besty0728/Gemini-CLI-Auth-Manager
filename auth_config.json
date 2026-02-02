@@ -1,0 +1,10 @@
+{
+  "auto_switch": {
+    "enabled": true,
+    "strategy": "gemini3-first",
+    "model_pattern": "gemini-3.*",
+    "threshold": 5,
+    "max_retries": 3,
+    "notify_on_switch": true
+  }
+}
