@@ -88,8 +88,8 @@ def add_to_path(target_dir):
         print(f"Please manually add this folder to your PATH: {target_str}")
 
 
-def update_settings_json(gemini_dir, hook_script_path):
-    """Update or create settings.json with hook configuration (official format)."""
+def update_settings_json(gemini_dir, after_agent_hook, before_agent_hook=None):
+    """Update or create settings.json with hook configurations (official format)."""
     settings_file = gemini_dir / "settings.json"
     settings = {}
     
@@ -101,41 +101,57 @@ def update_settings_json(gemini_dir, hook_script_path):
         except:
             pass
     
-    # Prepare hook entry using OFFICIAL nested format:
-    # { "matcher": "*", "hooks": [ { hook definitions } ] }
-    hook_command = f'python {hook_script_path.as_posix()}'
-    hook_definition = {
+    # Initialize hooks section
+    if "hooks" not in settings:
+        settings["hooks"] = {}
+    
+    # Configure AfterAgent hook (quota detection after response)
+    after_hook_def = {
         "name": "quota-auto-switch",
         "type": "command",
-        "command": hook_command,
+        "command": f'python {after_agent_hook.as_posix()}',
         "timeout": 10000,
         "description": "Auto-switch account when quota exhausted"
     }
     
-    matcher_entry = {
-        "matcher": "*",
-        "hooks": [hook_definition]
-    }
-    
-    # Update hooks section
-    if "hooks" not in settings:
-        settings["hooks"] = {}
+    after_matcher = {"matcher": "*", "hooks": [after_hook_def]}
     
     if "AfterAgent" not in settings["hooks"]:
         settings["hooks"]["AfterAgent"] = []
     
-    # Check if our hook already exists (search in nested structure)
-    existing_entries = settings["hooks"]["AfterAgent"]
-    hook_exists = False
-    for entry in existing_entries:
-        if "hooks" in entry:
-            for h in entry["hooks"]:
-                if "quota_auto_switch" in h.get("command", "") or h.get("name") == "quota-auto-switch":
-                    hook_exists = True
-                    break
+    # Check if AfterAgent hook already exists
+    after_exists = any(
+        "quota_auto_switch" in h.get("command", "") or h.get("name") == "quota-auto-switch"
+        for entry in settings["hooks"]["AfterAgent"]
+        for h in entry.get("hooks", [])
+    )
     
-    if not hook_exists:
-        existing_entries.append(matcher_entry)
+    if not after_exists:
+        settings["hooks"]["AfterAgent"].append(after_matcher)
+    
+    # Configure BeforeAgent hook (pre-check for failed state)
+    if before_agent_hook and before_agent_hook.exists():
+        before_hook_def = {
+            "name": "quota-pre-check",
+            "type": "command",
+            "command": f'python {before_agent_hook.as_posix()}',
+            "timeout": 10000,
+            "description": "Pre-check and switch if last request failed"
+        }
+        
+        before_matcher = {"matcher": "*", "hooks": [before_hook_def]}
+        
+        if "BeforeAgent" not in settings["hooks"]:
+            settings["hooks"]["BeforeAgent"] = []
+        
+        before_exists = any(
+            "quota_pre_check" in h.get("command", "") or h.get("name") == "quota-pre-check"
+            for entry in settings["hooks"]["BeforeAgent"]
+            for h in entry.get("hooks", [])
+        )
+        
+        if not before_exists:
+            settings["hooks"]["BeforeAgent"].append(before_matcher)
     
     # Save settings
     try:
@@ -166,12 +182,14 @@ def install():
     
     # Source files
     core_script = source_dir / "gemini_cli_auth_manager.py"
-    hook_script = source_dir / "quota_auto_switch.py"
+    hook_script = source_dir / "quota_auto_switch.py"  # AfterAgent hook
+    pre_check_script = source_dir / "quota_pre_check.py"  # BeforeAgent hook
     config_file = source_dir / "auth_config.json"
     
     # Target files
     target_script = gemini_dir / "gemini_cli_auth_manager.py"
     target_hook = hooks_dir / "quota_auto_switch.py"
+    target_pre_check = hooks_dir / "quota_pre_check.py"
     target_config = gemini_dir / "auth_config.json"
     target_bat = gemini_dir / "gchange.bat"
     target_toml = commands_dir / "change.toml"
@@ -230,11 +248,27 @@ def install():
     config_data["language"] = lang_key
     
     if enable_auto:
-        # Copy hook script
+        # Copy hook scripts
         if hook_script.exists():
             shutil.copy2(hook_script, target_hook)
+            print(f"[OK] AfterAgent hook installed: {target_hook.name}")
         else:
-            print(f"[Warning] Hook script not found: {hook_script}")
+            print(f"[Warning] AfterAgent hook not found: {hook_script}")
+        
+        if pre_check_script.exists():
+            shutil.copy2(pre_check_script, target_pre_check)
+            print(f"[OK] BeforeAgent hook installed: {target_pre_check.name}")
+        else:
+            print(f"[Warning] BeforeAgent hook not found: {pre_check_script}")
+            
+        # Copy restart helper
+        helper_script = source_dir / "restart_helper.py"
+        target_helper = gemini_dir / "restart_helper.py"
+        if helper_script.exists():
+            shutil.copy2(helper_script, target_helper)
+            print(f"[OK] Restart helper installed: {target_helper.name}")
+        else:
+            print(f"[Warning] Restart helper not found: {helper_script}")
         
         # Update auto_switch config
         if "auto_switch" not in config_data:
@@ -244,12 +278,23 @@ def install():
                 "model_pattern": "gemini-3.*",
                 "threshold": 5,
                 "max_retries": 3,
-                "notify_on_switch": True
+                "notify_on_switch": True,
+                "auto_restart": False
             }
         
-        # Update settings.json
-        if update_settings_json(gemini_dir, target_hook):
+        # Update settings.json with both hooks
+        if update_settings_json(gemini_dir, target_hook, target_pre_check):
             print(texts['hook_ok'])
+            
+        # --- NEW: Set Environment Variable for Cache Control ---
+        # Force Gemini CLI to use file storage on Windows so we can clear the cache file
+        # We use setx to make it persistent for future sessions
+        if sys.platform == "win32":
+            print("[Setup] Setting GEMINI_FORCE_FILE_STORAGE=true (User Level)...")
+            # setx returns 0 on success
+            subprocess.run('setx GEMINI_FORCE_FILE_STORAGE "true"', check=False, shell=True)
+            os.environ["GEMINI_FORCE_FILE_STORAGE"] = "true" 
+        # -----------------------------------------------------
     else:
         print(texts['hook_skip'])
     

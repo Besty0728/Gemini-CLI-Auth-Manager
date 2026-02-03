@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -27,7 +28,10 @@ DEFAULT_CONFIG = {
         "model_pattern": "gemini-3.*",
         "threshold": 5,
         "max_retries": 3,
-        "notify_on_switch": True
+        "threshold": 5,
+        "max_retries": 3,
+        "notify_on_switch": True,
+        "auto_restart": False
     }
 }
 
@@ -55,8 +59,10 @@ LANG = {
         "switch_account": "Switch Account",
         "switch_next": "Switch to Next Account",
         "change_strategy": "Change Strategy",
+        "view_quota": "View Current Quota",
         "config_auto": "Configure Auto-Switch",
         "toggle_auto": "Toggle Auto-Switch (Enable/Disable)",
+        "toggle_restart": "Toggle Auto-Restart",
         "manage_pool": "Manage Account Pool",
         "available_accounts": "Available Accounts",
         "enter_account_num": "Enter account number",
@@ -67,6 +73,7 @@ LANG = {
         "set_threshold": "Set Threshold",
         "set_retries": "Set Max Retries",
         "set_pattern": "Set Model Pattern",
+        "toggle_restart_sub": "Toggle Auto-Restart",
         "toggle_notify": "Toggle Notifications",
         "pool_mgmt": "Account Pool Management",
         "total": "Total",
@@ -125,8 +132,10 @@ LANG = {
         "switch_account": "切换账号",
         "switch_next": "切换到下一个账号",
         "change_strategy": "更改策略",
+        "view_quota": "查看当前配额",
         "config_auto": "配置自动切换",
         "toggle_auto": "开关自动切换功能",
+        "toggle_restart": "开关自动重启功能",
         "manage_pool": "管理账号池",
         "available_accounts": "可用账号",
         "enter_account_num": "请输入账号编号",
@@ -137,6 +146,7 @@ LANG = {
         "set_threshold": "设置阈值",
         "set_retries": "设置最大重试次数",
         "set_pattern": "设置模型匹配规则",
+        "toggle_restart_sub": "开关自动重启",
         "toggle_notify": "切换通知开关",
         "pool_mgmt": "账号池管理",
         "total": "共计",
@@ -321,6 +331,19 @@ def fast_switch(target_arg, silent=False):
             shutil.copy2(t_id, ID_FILE)
         elif ID_FILE.exists():
             ID_FILE.unlink(missing_ok=True)
+            
+        # --- NEW: Clear Token Cache ---
+        # Gemini CLI caches tokens. We must delete this cache to force it to use our new oauth_creds.json
+        cache_file = GEMINI_DIR / "mcp-oauth-tokens-v2.json"
+        if cache_file.exists():
+            try:
+                cache_file.unlink()
+                if not silent:
+                    print(f"{UI.DIM}  [Cache] Cleared token cache to force reload.{UI.RESET}")
+            except OSError as e:
+                if not silent:
+                    print(f"{UI.YELLOW}[Warning] Failed to clear token cache: {e}{UI.RESET}")
+        # ------------------------------
     except OSError as e:
         if not silent:
             print(f"{UI.RED}[Error] Switch failed: {e}{UI.RESET}")
@@ -468,13 +491,13 @@ def handle_config(args):
         print(f"  strategy       : {UI.CYAN}{auto_switch.get('strategy', 'gemini3-first')}{UI.RESET}")
         print(f"  model_pattern  : {auto_switch.get('model_pattern', 'gemini-3.*')}")
         print(f"  threshold      : {auto_switch.get('threshold', 5)}%")
-        print(f"  max_retries    : {auto_switch.get('max_retries', 3)}")
-        print(f"  notify_on_switch: {auto_switch.get('notify_on_switch', True)}")
+        print(f"  cache_minutes  : {auto_switch.get('cache_minutes', 5)}")
+        print(f"  models_to_check: {auto_switch.get('models_to_check', [])}")
         print(f"\n{UI.BOLD}Usage:{UI.RESET} gchange config <key> <value>")
         return
     
     key = args[0].lower()
-    valid_keys = ["enabled", "strategy", "model_pattern", "threshold", "max_retries", "notify_on_switch"]
+    valid_keys = ["enabled", "strategy", "model_pattern", "threshold", "max_retries", "notify_on_switch", "cache_minutes", "models_to_check"]
     
     if key not in valid_keys:
         print(f"{UI.RED}[Error] Invalid config key: {key}{UI.RESET}")
@@ -491,12 +514,15 @@ def handle_config(args):
     # Type conversion
     if key in ["enabled", "notify_on_switch"]:
         value = value.lower() in ["true", "1", "yes", "on"]
-    elif key in ["threshold", "max_retries"]:
+    elif key in ["threshold", "max_retries", "cache_minutes"]:
         try:
             value = int(value)
         except ValueError:
             print(f"{UI.RED}[Error] {key} must be a number.{UI.RESET}")
             return
+    elif key == "models_to_check":
+        # Parse comma-separated list
+        value = [x.strip() for x in value.split(",") if x.strip()]
     
     auto_switch[key] = value
     config["auto_switch"] = auto_switch
@@ -719,20 +745,24 @@ def interactive_menu():
         print(f"  {t('auto_switch')}    : {UI.GREEN if auto_switch.get('enabled') else UI.RED}{enabled_text}{UI.RESET}")
         print(f"  {t('strategy')}       : {UI.CYAN}{auto_switch.get('strategy', 'gemini3-first')}{UI.RESET}")
         print(f"  {t('threshold')}      : {auto_switch.get('threshold', 5)}%")
+        restart_text = t('enabled') if auto_switch.get('auto_restart') else t('disabled')
+        print(f"  Only Restart      : {UI.GREEN if auto_switch.get('auto_restart') else UI.RED}{restart_text}{UI.RESET}")
         
         print(f"\n  {UI.BOLD}{t('menu')}:{UI.RESET}")
         print(f"  {UI.line('-', 40)}")
         print(f"  {UI.CYAN}1{UI.RESET}. {t('switch_account')}")
         print(f"  {UI.CYAN}2{UI.RESET}. {t('switch_next')}")
         print(f"  {UI.CYAN}3{UI.RESET}. {t('change_strategy')}")
-        print(f"  {UI.CYAN}4{UI.RESET}. {t('config_auto')}")
-        print(f"  {UI.CYAN}5{UI.RESET}. {t('toggle_auto')}")
-        print(f"  {UI.CYAN}6{UI.RESET}. {t('manage_pool')}")
+        print(f"  {UI.CYAN}4{UI.RESET}. {t('view_quota')}")
+        print(f"  {UI.CYAN}5{UI.RESET}. {t('config_auto')}")
+        print(f"  {UI.CYAN}6{UI.RESET}. {t('toggle_auto')}")
+        print(f"  {UI.CYAN}7{UI.RESET}. {t('toggle_restart')}")
+        print(f"  {UI.CYAN}8{UI.RESET}. {t('manage_pool')}")
         print(f"  {UI.CYAN}0{UI.RESET}. {t('exit')}")
         print(f"  {UI.line('-', 40)}")
         
         try:
-            choice = input(f"\n  {t('enter_choice')} (0-6): ").strip()
+            choice = input(f"\n  {t('enter_choice')} (0-8): ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
@@ -776,14 +806,27 @@ def interactive_menu():
                 pass
         
         elif choice == "4":
+            # View current quota
+            try:
+                # Use subprocess to run independent script to avoid scope pollution
+                subprocess.run(
+                    ["python", str(GEMINI_DIR / "quota_api_client.py")], 
+                    check=False
+                )
+            except Exception as e:
+                print(f"{UI.RED}[Error] Failed to run quota check: {e}{UI.RESET}")
+            input(f"\n  {t('press_enter')}")
+
+        elif choice == "5":
             # Configure Auto-Switch
             print(f"\n  {UI.BOLD}{t('auto_config')}:{UI.RESET}")
             print(f"  1. {t('set_threshold')} ({auto_switch.get('threshold', 5)}%)")
             print(f"  2. {t('set_retries')} ({auto_switch.get('max_retries', 3)})")
             print(f"  3. {t('set_pattern')} ({auto_switch.get('model_pattern', 'gemini-3.*')})")
             print(f"  4. {t('toggle_notify')} ({auto_switch.get('notify_on_switch', True)})")
+            print(f"  5. {t('toggle_restart_sub')} ({auto_switch.get('auto_restart', False)})")
             try:
-                cfg_choice = input(f"\n  {t('enter_choice')} (1-4): ").strip()
+                cfg_choice = input(f"\n  {t('enter_choice')} (1-5): ").strip()
                 if cfg_choice == "1":
                     val = input(f"  {t('threshold')} (0-100): ").strip()
                     handle_config(["threshold", val])
@@ -796,17 +839,29 @@ def interactive_menu():
                 elif cfg_choice == "4":
                     current = auto_switch.get('notify_on_switch', True)
                     handle_config(["notify_on_switch", "false" if current else "true"])
+                elif cfg_choice == "5":
+                    current = auto_switch.get('auto_restart', False)
+                    handle_config(["auto_restart", "false" if current else "true"])
                 input(f"\n  {t('press_enter')}")
             except (EOFError, KeyboardInterrupt):
                 pass
         
-        elif choice == "5":
+        elif choice == "6":
             # Toggle Auto-Switch
             current = auto_switch.get('enabled', True)
             handle_config(["enabled", "false" if current else "true"])
             input(f"\n  {t('press_enter')}")
         
-        elif choice == "6":
+        elif choice == "7":
+            # Toggle Auto-Restart
+            curr = auto_switch.get("auto_restart", False)
+            auto_switch["auto_restart"] = not curr
+            config["auto_switch"] = auto_switch
+            save_config(config)
+            print(f"{UI.GREEN}[OK] Auto-Restart {'Enabled' if not curr else 'Disabled'}{UI.RESET}")
+            time.sleep(1)
+
+        elif choice == "8":
             # Manage Account Pool
             print(f"\n  {UI.BOLD}{t('pool_mgmt')}:{UI.RESET}")
             print(f"  {UI.line('-', 40)}")

@@ -1,10 +1,9 @@
 {
   "auto_switch": {
     "enabled": true,
-    "strategy": "gemini3-first",
-    "model_pattern": "gemini-3.*",
-    "threshold": 5,
-    "max_retries": 3,
-    "notify_on_switch": true
-  }
+    "threshold": 10,
+    "cache_minutes": 5,
+    "models_to_check": ["gemini-3-pro-preview", "gemini-2.5-pro"]
+  },
+  "language": "cn"
 }
