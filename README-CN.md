@@ -216,6 +216,34 @@ BeforeAgent Hook 触发
 
 ---
 
+### 4. 自动重启 (可选)
+
+由于 Gemini CLI 不支持热重载凭据，切换账号后需要重启 CLI 才能生效。
+本工具提供了自动重启功能，但**默认是关闭的**。
+
+您可以通过菜单开启：
+```bash
+gchange menu
+# 选择 7. Toggle Auto-Restart
+```
+开启后，当配额耗尽并自动切换账号时，脚本会自动关闭当前窗口并启动一个新的 Gemini CLI 窗口。
+
+---
+
+## 🔧 技术原理
+
+### 1. 单文件多账号
+Gemini CLI 仅识别 `~/.gemini/oauth_creds.json`。
+本工具通过在 `~/.gemini/auth_profiles/` 维护多个账号的凭据副本，在切换时执行 **"备份 -> 覆盖 -> 清除缓存"** 的操作，欺骗 CLI 加载不同的凭据。
+
+### 2. 缓存与环境变量
+为了防止 CLI 读取旧的 Windows Keychain 缓存，本工具会在安装时设置环境变量 `GEMINI_FORCE_FILE_STORAGE=true`，迫使 CLI 使用文件存储，并在每次切换时强制删除缓存文件，确保新凭据即时生效。
+
+### 3. Token 自动续期
+只需提供包含 `refresh_token` 的 `oauth_creds.json`，Gemini CLI 就能自动处理 Access Token 的续期。您导入的凭据理论上可以长期使用，无需频繁手动登录。
+
+---
+
 ## ❓ 常见问题
 
 ### Q: 切换账号后为什么需要重启 CLI？

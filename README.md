@@ -173,6 +173,32 @@ Edit `~/.gemini/auth_config.json`:
 
 Gemini CLI caches OAuth credentials in memory upon startup. Switching the `oauth_creds.json` file requires a process restart to reload the new credentials.
 
+### 4. Auto-Restart (Optional)
+
+Since Gemini CLI does not support hot-reloading credentials, a restart is required after switching accounts.
+This tool provides an auto-restart feature, but it is **Disabled by Default**.
+
+You can enable it via the menu:
+```bash
+gchange menu
+# Select 7. Toggle Auto-Restart
+```
+When enabled, the script will automatically close the current window and spawn a new Gemini CLI window upon quota exhaustion.
+
+---
+
+## 🔧 Technical Details
+
+### 1. Single-File Switching
+Gemini CLI only recognizes `~/.gemini/oauth_creds.json`.
+This tool maintains copies of credentials in `~/.gemini/auth_profiles/`. When switching, it performs a **"Backup -> Overwrite -> Clear Cache"** operation to trick the CLI into loading the new credentials.
+
+### 2. Cache & Environment Variables
+To prevent the CLI from reading stale Windows Keychain cache, this tool sets `GEMINI_FORCE_FILE_STORAGE=true` during installation. This forces the CLI to use file-based storage, which our script forces to reload by deleting the cache file on every switch.
+
+### 3. Token Auto-Renewal
+As long as your `oauth_creds.json` contains a `refresh_token`, Gemini CLI handles Access Token renewal automatically. Your imported credentials should work indefinitely without frequent manual logins.
+
 ### Q: How to handle 403 VALIDATION_REQUIRED?
 
 This is a Google Account validation issue.
