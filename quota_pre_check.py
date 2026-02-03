@@ -33,7 +33,7 @@ QUOTA_CACHE_FILE = GEMINI_DIR / "quota_cache.json"
 # Default configuration
 DEFAULT_THRESHOLD = 0.10  # 10% remaining triggers switch
 DEFAULT_MODELS_TO_CHECK = ["gemini-3-pro-preview", "gemini-2.5-pro"]
-DEFAULT_CACHE_MINUTES = 5  # Cache quota check for 5 minutes
+DEFAULT_CACHE_MINUTES = 3  # Cache quota check for 3 minutes
 DEFAULT_STRATEGY = "gemini3-first"
 DEFAULT_PATTERN = "gemini-3.*"
 

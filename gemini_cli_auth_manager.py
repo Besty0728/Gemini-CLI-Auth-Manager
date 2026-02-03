@@ -28,10 +28,9 @@ DEFAULT_CONFIG = {
         "model_pattern": "gemini-3.*",
         "threshold": 5,
         "max_retries": 3,
-        "threshold": 5,
-        "max_retries": 3,
         "notify_on_switch": True,
-        "auto_restart": False
+        "auto_restart": False,
+        "cache_minutes": 3
     }
 }
 
