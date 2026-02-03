@@ -1,11 +1,11 @@
 # Gemini CLI Auth Manager
 
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
+![Platform](https://img.shields.io/badge/platform-Windows-yellow.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Version](https://img.shields.io/badge/version-2.0-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.1-brightgreen.svg)
 
-**Gemini CLI Auth Manager** is a lightweight, powerful utility for managing multiple accounts in the Google Gemini CLI environment. Features instant account switching, **automatic rotation when quota is exhausted**, and **unified account pool management**!
+**Gemini CLI Auth Manager** is a lightweight tool designed for the Google Gemini CLI environment. It supports instant multi-account switching, **automatic rotation on quota exhaustion**, and **unified account pool management**!
 
 > 📖 [中文版本 (Chinese Version)](./README-CN.md)
 
@@ -13,12 +13,12 @@
 
 ## ✨ Features
 
-- **One-Command Switch**: Toggle between accounts instantly
-- **Auto Backup**: Automatically saves your credentials when switching
-- **🆕 Auto-Rotation**: Automatically switch to next account when quota exhausted
-- **🆕 Account Pool**: Unified view, add, and remove accounts
-- **🆕 Interactive Menu**: Visual configuration interface for easy management
-- **Slash Command**: Fully integrated with Gemini CLI as `/change`
+- **Instant Switching**: Switch between multiple accounts in seconds.
+- **Auto-Backup**: Automatically saves your credentials upon switching.
+- **🆕 Quota Pre-check**: Real-time quota monitoring via Google API, auto-switches before exhaustion.
+- **🆕 Pool Management**: Unified interface to view, add, and remove accounts.
+- **🆕 Interactive Menu**: Visual configuration interface for easy management.
+- **Slash Command**: Seamlessly integrated as `/change` in Gemini CLI.
 
 ---
 
@@ -30,182 +30,178 @@ cd gemini-auth-manager
 python install.py
 ```
 
+### Dependencies
+
+```bash
+pip install requests
+```
+
 ### How to Update
 
-If you have an older version installed, follow these steps to update:
+If you have an older version installed:
 
-1. Run `git pull` in the project directory to sync the latest code.
-2. Re-run `python install.py` to upgrade (Recommended, to sync the latest Hook logic).
-3. Or manually copy `quota_auto_switch.py` to the `~/.gemini/` directory.
+1. Run `git pull` to get the latest code.
+2. Run `python install.py` again (Recommended, updates hooks).
 
 ---
 
 ## 🛠 Usage
 
-### Quick Reference
+### Quick Commands
 
 ```bash
-# List all accounts
+# List accounts
 gchange
 
-# Switch accounts
+# Switch account
 gchange 1                    # Switch to account #1
 gchange user@gmail.com       # Switch by email
 gchange next                 # Switch to next account
 
-# Interactive menu (recommended)
+# Interactive Menu (Recommended)
 gchange menu
 
-# Account pool management
+# Pool Management
 gchange pool                 # View pool
 gchange pool add             # Add account (interactive)
-gchange pool add user@gmail.com    # Add specific account
+gchange pool add user@gmail.com    # Add specific email
 gchange pool remove 2        # Remove account #2
 gchange pool import ~/creds.json   # Import credentials file
 
-# Strategy management
-gchange strategy             # View current strategy
-gchange strategy conservative       # Set to conservative mode
-gchange strategy gemini3-first      # Set to Gemini3-first mode
-
 # Configuration
-gchange config               # View all config
+gchange config               # View config
 gchange config enabled true  # Enable auto-switch
 gchange config threshold 10  # Set threshold to 10%
 ```
 
-### Slash Commands (Inside Gemini CLI)
+### Slash Command (Inside Gemini CLI)
 
 ```text
-/change           # List all accounts
+/change           # List accounts
 /change 1         # Switch to account #1
 /change next      # Switch to next account
+```
+
+### Quota Query Tool
+
+```bash
+# Query current account quota directly
+python quota_api_client.py
+```
+
+Example Output:
+```
+📊 Gemini CLI Quota Status
+======================================================================
+Model                          Remaining       Resets In
+----------------------------------------------------------------------
+gemini-2.5-flash               🟢 93.3%        (10h 20m)
+gemini-3-pro-preview           🟡 33.5%        (1h 10m)
+gemini-2.5-pro                 🟡 33.5%        (1h 10m)
+======================================================================
 ```
 
 ---
 
 ## 🎯 Interactive Menu
 
-Run `gchange menu` to open the interactive configuration interface:
+Run `gchange menu` to open the configuration interface:
 
 ```
   Menu:
   ----------------------------------------
   1. Switch Account
   2. Switch to Next Account
-  3. Change Strategy
-  4. Configure Auto-Switch
-  5. Toggle Auto-Switch (Enable/Disable)
-  6. Manage Account Pool
+  3. Configure Auto-Switch
+  4. Toggle Auto-Switch (Enable/Disable)
+  5. Manage Account Pool
   0. Exit
 ```
 
 ---
 
-## 📦 Account Pool Management
+## 🔄 Quota Pre-check (BeforeAgent Hook)
 
-### View Pool
+The system monitors quota status in real-time via the Google Code Assist API:
 
-```bash
-gchange pool
+```
+User sends request
+    ↓
+BeforeAgent Hook triggers
+    ↓
+Calls Google API for remaining quota %
+    ↓
+Detects Pro models < 10%
+    ↓
+Automatically calls gchange next
+    ↓
+Shows switch notification, User resends request
 ```
 
-Output example:
+### Configuration
+
+Edit `~/.gemini/auth_config.json`:
+
+```json
+{
+  "auto_switch": {
+    "enabled": true,
+    "threshold": 10,
+    "cache_minutes": 5,
+    "models_to_check": ["gemini-3-pro-preview", "gemini-2.5-pro"]
+  }
+}
 ```
-Account Pool Overview:
---------------------------------------------------
-  01. user1@gmail.com                    ● Active
-  02. user2@gmail.com                    ○ Standby
-  03. user3@gmail.com                    ○ Standby
---------------------------------------------------
-  Total: 3 accounts
-```
-
-### Add Account
-
-```bash
-# Interactive add
-gchange pool add
-
-# Direct add
-gchange pool add newuser@gmail.com
-```
-
-### Remove Account
-
-```bash
-# Remove by index
-gchange pool remove 2
-
-# Remove by email
-gchange pool remove user2@gmail.com
-```
-
-### Import Credentials
-
-```bash
-gchange pool import /path/to/oauth_creds.json
-```
-
----
-
-## 🔄 Auto-Switch Feature
-
-When API returns quota error (429), the system will automatically:
-1. Switch to the next account
-2. Retry the current request
-3. Notify you of the switch
-
-### Configuration Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
 | `enabled` | Enable auto-switch | `true` |
-| `strategy` | Rotation strategy | `gemini3-first` |
-| `threshold` | Quota threshold (%) | `5` |
-| `max_retries` | Max retry attempts | `3` |
+| `threshold` | Quota threshold (%) | `10` |
+| `cache_minutes` | Cache duration (min) | `5` |
+| `models_to_check` | Models to monitor | Pro models |
 
-### Strategy Comparison
+### Note
 
-| Strategy | Trigger Condition | Use Case |
-|----------|-------------------|----------|
-| `conservative` | All models ≤ threshold | Maximize each account |
-| `gemini3-first` | Any Gemini 3.x ≤ threshold | Prefer latest models |
+- **Restart Required**: Due to Gemini CLI limitations, you must restart the CLI after an account switch for the new credentials to take effect.
+- **Notification**: You will see a prompt to resend your request after a successful switch.
 
 ---
 
 ## ❓ FAQ
 
-### Q: Which errors does auto-switch support detecting?
+### Q: Why do I need to restart CLI after switching?
 
-The Hook automatically detects the following scenarios to trigger an account switch:
+Gemini CLI caches OAuth credentials in memory upon startup. Switching the `oauth_creds.json` file requires a process restart to reload the new credentials.
 
-| Error Type | Example Message |
-|------------|-----------------|
-| HTTP 429 | `429 Too Many Requests` |
-| Quota Exhausted | `Resource exhausted`, `Quota exceeded` |
-| CLI Tip | `Usage limit reached for all Pro models` |
-| Wait for Reset | `Access resets at 11:55 PM GMT+8` |
-| Selection UI | `1. Keep trying  2. Stop` |
+### Q: How to handle 403 VALIDATION_REQUIRED?
 
-### Q: What should I do if a 403 VALIDATION_REQUIRED error occurs?
+This is a Google Account validation issue.
+1. Visit the link provided in the error.
+2. Login and verify your account.
+3. Or delete credentials and re-login: `rm ~/.gemini/oauth_creds.json && gemini`
 
-This is a Google Account verification issue, not an issue with the switching tool.
+---
 
-**Steps to solve**:
-1. Visit the validation link in the error message.
-2. Log in to the corresponding Google account and complete the verification.
-3. Or delete credentials and log in again: `rm ~/.gemini/oauth_creds.json && gemini`
+## 📁 File Structure
 
-### Q: How to switch languages manually?
-
-```bash
-# Edit config file
-# Add "language": "cn" or "en" to ~/.gemini/auth_config.json
+```
+~/.gemini/
+├── oauth_creds.json          # Current credentials
+├── auth_config.json          # Configuration
+├── gemini_cli_auth_manager.py # Core script
+├── gchange.bat               # Command launcher
+├── accounts/                 # Account pool
+│   ├── user1@gmail.com.json
+│   └── ...
+├── hooks/
+│   ├── quota_pre_check.py    # BeforeAgent Hook
+│   └── quota_auto_switch.py  # AfterAgent Hook
+└── commands/
+    └── change.toml           # Slash command config
 ```
 
 ---
 
 ## ❤️ Contributing
 
-Feel free to submit issues or pull requests if you have ideas for improvements!
+Issues and PRs are welcome!
