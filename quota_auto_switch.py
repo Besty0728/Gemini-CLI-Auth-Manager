@@ -14,6 +14,7 @@ from pathlib import Path
 GEMINI_DIR = Path(os.path.expanduser("~/.gemini"))
 CONFIG_FILE = GEMINI_DIR / "auth_config.json"
 RETRY_FILE = GEMINI_DIR / ".auto_switch_retry_count"
+ERROR_STATE_FILE = GEMINI_DIR / ".last_quota_error"  # For BeforeAgent pre-check
 
 DEFAULT_CONFIG = {
     "auto_switch": {
@@ -91,6 +92,24 @@ def reset_retry_count():
     if RETRY_FILE.exists():
         try:
             RETRY_FILE.unlink()
+        except:
+            pass
+
+
+def set_error_state(retry_count):
+    """Set error state for BeforeAgent pre-check (persists even if CLI crashes)."""
+    try:
+        with open(ERROR_STATE_FILE, 'w', encoding='utf-8') as f:
+            json.dump({"quota_error": True, "retry_count": retry_count}, f)
+    except:
+        pass
+
+
+def clear_error_state():
+    """Clear the error state file after successful request."""
+    if ERROR_STATE_FILE.exists():
+        try:
+            ERROR_STATE_FILE.unlink()
         except:
             pass
 
@@ -174,64 +193,134 @@ def switch_to_next():
 
 def main():
     """Main hook entry point."""
-    # Read context from stdin
     try:
-        context = json.load(sys.stdin)
-    except:
-        # No valid input, pass through
-        print("{}")
-        sys.exit(0)
-    
-    response = context.get("prompt_response", "")
-    
-    # Load config
-    config = load_config()
-    auto_switch = config.get("auto_switch", {})
-    
-    # Check if auto-switch is enabled
-    if not auto_switch.get("enabled", True):
-        print("{}")
-        sys.exit(0)
-    
-    # Check for quota error
-    if not is_quota_error(response):
-        # No error, reset retry count and continue
-        reset_retry_count()
-        print("{}")
-        sys.exit(0)
-    
-    # Quota error detected
-    max_retries = auto_switch.get("max_retries", 3)
-    current_retry = get_retry_count()
-    
-    if current_retry >= max_retries:
-        log(f"⚠️ [Auth Manager] Max retries ({max_retries}) reached. All accounts may be exhausted.")
-        reset_retry_count()
-        print("{}")
-        sys.exit(0)
-    
-    # Check if we should switch based on strategy
-    # Note: We don't have direct access to /stats output in hook context,
-    # so we rely on error detection. Future improvement could invoke /stats.
-    if should_switch_by_strategy(config):
-        new_account = switch_to_next()
-        
-        if new_account:
-            set_retry_count(current_retry + 1)
-            
-            if auto_switch.get("notify_on_switch", True):
-                log(f"⚠️ [Auth Manager] Quota exhausted. Switched to {new_account}. Retrying... ({current_retry + 1}/{max_retries})")
-            
-            # Exit 2 triggers automatic retry in Gemini CLI
-            sys.exit(2)
-        else:
-            log("⚠️ [Auth Manager] Failed to switch account.")
+        # Read context from stdin
+        try:
+            context = json.load(sys.stdin)
+        except:
+            # No valid input, pass through
             print("{}")
             sys.exit(0)
-    else:
+        
+        response = context.get("prompt_response", "")
+        
+        # Load config
+        config = load_config()
+        auto_switch = config.get("auto_switch", {})
+        
+        # Check if auto-switch is enabled
+        if not auto_switch.get("enabled", True):
+            print("{}")
+            sys.exit(0)
+        
+        # Check for quota error
+        if not is_quota_error(response):
+            # No error, reset retry count and clear error state
+            reset_retry_count()
+            clear_error_state()  # Clear state for BeforeAgent
+            print("{}")
+            sys.exit(0)
+        
+        # Quota error detected - IMMEDIATELY write error state
+        # This ensures BeforeAgent can pre-switch even if CLI crashes after this
+        current_retry = get_retry_count()
+        set_error_state(current_retry)  # Write state BEFORE any other processing
+        
+        max_retries = auto_switch.get("max_retries", 3)
+        
+        if current_retry >= max_retries:
+            log(f"⚠️ [Auth Manager] Max retries ({max_retries}) reached. All accounts may be exhausted.")
+            reset_retry_count()
+            clear_error_state()  # Clear state since we've given up
+            print("{}")
+            sys.exit(0)
+        
+        # Check if we should switch based on strategy
+        if should_switch_by_strategy(config):
+            new_account = switch_to_next()
+            
+            if new_account:
+                set_retry_count(current_retry + 1)
+                
+                # Build message based on language
+                lang = config.get("language", "en")
+                if lang == "cn":
+                    msg = f"🔄 配额已耗尽，已自动切换到账号：{new_account}。正在重试请求... ({current_retry + 1}/{max_retries})"
+                else:
+                    msg = f"🔄 Quota exhausted. Switched to: {new_account}. Retrying... ({current_retry + 1}/{max_retries})"
+                
+                # Log to stderr (visible in debug console)
+                log(f"⚠️ [Auth Manager] {msg}")
+                
+                # Delete token cache to force reload
+                cache_file = GEMINI_DIR / "mcp-oauth-tokens-v2.json"
+                if cache_file.exists():
+                    try:
+                        cache_file.unlink()
+                        log("[Cache] Cleared token cache.")
+                    except OSError as e:
+                        log(f"[Cache] Warning: Failed to clear cache: {e}")
+
+                # Output JSON with retry decision
+                # For AfterAgent, use "decision": "retry" to trigger retry
+                result = {
+                    "decision": "retry",
+                    "systemMessage": msg
+                }
+                print(json.dumps(result))
+                
+                # --- AUTO-RESTART LOGIC ---
+                if auto_switch.get("auto_restart", False):
+                    try:
+                        # Determine current PID (likely python script itself)
+                        target_pid = os.getppid()
+                        
+                        # Launch restart helper detached
+                        restart_script = GEMINI_DIR / "restart_helper.py"
+                        if not restart_script.exists():
+                            # Maybe still in source dir?
+                            script_dir = Path(__file__).parent
+                            restart_script = script_dir / "restart_helper.py"
+                            
+                        if restart_script.exists():
+                            log(f"[Auto-Restart] Triggering restart for PID {target_pid}...")
+                            
+                            cmd = [sys.executable, str(restart_script), "--pid", str(target_pid), "--delay", "3"]
+                            
+                            if sys.platform == "win32":
+                                # Use os.system with 'start' command - most reliable way on Windows
+                                # 'start /b' runs in background without new window for the helper
+                                # The helper itself will use 'start gemini' to open new window
+                                os.system(f'start /b "" "{sys.executable}" "{restart_script}" --pid {target_pid} --delay 3')
+                            else:
+                                subprocess.Popen(
+                                    [sys.executable, str(restart_script), "--pid", str(target_pid), "--delay", "3"],
+                                    start_new_session=True,
+                                    close_fds=True
+                                )
+                        else:
+                            log(f"[Auto-Restart] Helper script not found: {restart_script}")
+                            
+                    except Exception as restart_err:
+                        log(f"[Auto-Restart] Failed to trigger: {restart_err}")
+                # --------------------------
+
+                sys.exit(0)  # Use exit(0) for successful hook execution
+            else:
+                log("⚠️ [Auth Manager] Failed to switch account.")
+                print("{}")
+                sys.exit(0)
+        else:
+            print("{}")
+            sys.exit(0)
+    
+    except Exception as e:
+        # Catch any unexpected errors to prevent hook failure
+        log(f"⚠️ [Auth Manager] Error: {e}")
         print("{}")
         sys.exit(0)
 
 
 if __name__ == "__main__":
     main()
+
