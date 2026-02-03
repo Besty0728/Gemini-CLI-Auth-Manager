@@ -30,6 +30,14 @@ cd gemini-auth-manager
 python install.py
 ```
 
+### How to Update
+
+If you have an older version installed, follow these steps to update:
+
+1. Run `git pull` in the project directory to sync the latest code.
+2. Re-run `python install.py` to upgrade (Recommended, to sync the latest Hook logic).
+3. Or manually copy `quota_auto_switch.py` to the `~/.gemini/` directory.
+
 ---
 
 ## 🛠 Usage
@@ -163,6 +171,38 @@ When API returns quota error (429), the system will automatically:
 |----------|-------------------|----------|
 | `conservative` | All models ≤ threshold | Maximize each account |
 | `gemini3-first` | Any Gemini 3.x ≤ threshold | Prefer latest models |
+
+---
+
+## ❓ FAQ
+
+### Q: Which errors does auto-switch support detecting?
+
+The Hook automatically detects the following scenarios to trigger an account switch:
+
+| Error Type | Example Message |
+|------------|-----------------|
+| HTTP 429 | `429 Too Many Requests` |
+| Quota Exhausted | `Resource exhausted`, `Quota exceeded` |
+| CLI Tip | `Usage limit reached for all Pro models` |
+| Wait for Reset | `Access resets at 11:55 PM GMT+8` |
+| Selection UI | `1. Keep trying  2. Stop` |
+
+### Q: What should I do if a 403 VALIDATION_REQUIRED error occurs?
+
+This is a Google Account verification issue, not an issue with the switching tool.
+
+**Steps to solve**:
+1. Visit the validation link in the error message.
+2. Log in to the corresponding Google account and complete the verification.
+3. Or delete credentials and log in again: `rm ~/.gemini/oauth_creds.json && gemini`
+
+### Q: How to switch languages manually?
+
+```bash
+# Edit config file
+# Add "language": "cn" or "en" to ~/.gemini/auth_config.json
+```
 
 ---
 

@@ -30,6 +30,14 @@ cd gemini-auth-manager
 python install.py
 ```
 
+### 如何更新
+
+如果你已经安装过旧版本，可以通过以下步骤更新：
+
+1. 在项目目录运行 `git pull` 同步最新代码。
+2. 重新运行 `python install.py` 覆盖安装（推荐，可同步最新 Hook 逻辑）。
+3. 或手动将 `quota_auto_switch.py` 拷贝至 `~/.gemini/` 目录下。
+
 ---
 
 ## 🛠 使用方法
@@ -163,6 +171,38 @@ gchange pool import /path/to/oauth_creds.json
 |------|---------|---------|
 | `conservative` | 所有模型配额 ≤ 阈值 | 充分利用每个账号 |
 | `gemini3-first` | 任一 Gemini 3.x ≤ 阈值 | 偏好最新模型 |
+
+---
+
+## ❓ 常见问题
+
+### Q: 自动切换支持检测哪些错误？
+
+Hook 会自动检测以下情况并触发账号切换：
+
+| 错误类型 | 示例消息 |
+|---------|---------|
+| HTTP 429 | `429 Too Many Requests` |
+| 配额耗尽 | `Resource exhausted`, `Quota exceeded` |
+| CLI 提示 | `Usage limit reached for all Pro models` |
+| 等待重置 | `Access resets at 11:55 PM GMT+8` |
+| 选择界面 | `1. Keep trying  2. Stop` |
+
+### Q: 出现 403 VALIDATION_REQUIRED 错误怎么办？
+
+这是 Google 账户验证问题，不是切换工具的问题。
+
+**解决步骤**：
+1. 访问错误信息中的验证链接
+2. 登录对应的 Google 账户并完成验证
+3. 或删除凭证重新登录：`rm ~/.gemini/oauth_creds.json && gemini`
+
+### Q: 如何手动切换语言？
+
+```bash
+# 编辑配置文件
+# ~/.gemini/auth_config.json 中添加 "language": "cn" 或 "en"
+```
 
 ---
 

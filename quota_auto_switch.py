@@ -26,13 +26,27 @@ DEFAULT_CONFIG = {
     }
 }
 
-# Quota error patterns
+# Quota error patterns (case-insensitive matching)
 QUOTA_ERROR_PATTERNS = [
+    # HTTP status codes
     r"429",
+    r"403.*quota",
+    
+    # API error messages
     r"Resource exhausted",
     r"Quota exceeded",
     r"rate limit",
+    r"RESOURCE_EXHAUSTED",
+    
+    # Gemini CLI UI messages
     r"Usage limit reached",
+    r"limit reached for all.*models",
+    r"Access resets at",
+    r"Keep trying.*Stop",  # 检测 "1. Keep trying  2. Stop" 选项
+    
+    # Validation errors (403)
+    r"PERMISSION_DENIED.*VALIDATION_REQUIRED",
+    r"Please verify your account",
 ]
 
 
