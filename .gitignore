@@ -8,6 +8,11 @@ auth_profiles/
 __pycache__/
 *.pyc
 
+# Python Virtual Environments
+.venv/
+env/
+.env
+
 # IDE settings
 .vscode/
 .idea/

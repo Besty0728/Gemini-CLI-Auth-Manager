@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gemini CLI Auth Manager v2.0
+Gemini CLI Auth Manager v2.1
 Fast account switching with auto-rotation support for Gemini CLI.
 """
 import json
@@ -9,7 +9,27 @@ import re
 import shutil
 import subprocess
 import sys
+import time
+import webbrowser
+import requests
 from pathlib import Path
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
+
+# --- OAuth Constants ---
+# Client credentials are loaded from ~/.gemini/auth_config.json (written by install.py)
+GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_SECRET = ""
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
+GOOGLE_SCOPES = [
+    "https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/cclog",
+    "https://www.googleapis.com/auth/experimentsandconfigs"
+]
 
 # --- Configuration Paths ---
 GEMINI_DIR = Path(os.path.expanduser("~/.gemini"))
@@ -22,6 +42,10 @@ CONFIG_FILE = GEMINI_DIR / "auth_config.json"
 # --- Default Configuration ---
 DEFAULT_CONFIG = {
     "language": "en",
+    "oauth_client": {
+        "client_id": "",
+        "client_secret": ""
+    },
     "auto_switch": {
         "enabled": True,
         "strategy": "gemini3-first",
@@ -34,10 +58,29 @@ DEFAULT_CONFIG = {
     }
 }
 
+
+def _init_oauth_credentials():
+    """Load OAuth client credentials from ~/.gemini/auth_config.json at startup."""
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                cfg = json.load(f)
+            oauth = cfg.get("oauth_client", {})
+            cid = oauth.get("client_id", "")
+            cs = oauth.get("client_secret", "")
+            if cid and cs:
+                return cid, cs
+        except Exception:
+            pass
+    return "", ""
+
+
+GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET = _init_oauth_credentials()
+
 # --- Language Dictionary ---
 LANG = {
     "en": {
-        "title": "GEMINI-CLI-AUTH-MANAGER v2.0",
+        "title": "GEMINI-CLI-AUTH-MANAGER v2.1",
         "subtitle": "Fast Switcher + Auto Rotation | By Besty",
         "status": "STATUS",
         "active": "ACTIVE",
@@ -77,7 +120,6 @@ LANG = {
         "pool_mgmt": "Account Pool Management",
         "total": "Total",
         "options": "Options",
-        "add_account": "Add new account",
         "remove_account": "Remove account",
         "import_creds": "Import credentials",
         "back": "Back to main menu",
@@ -107,10 +149,16 @@ LANG = {
         "file_not_found": "File not found",
         "imported": "Imported",
         "enter_path": "Enter credentials file path",
-        "enter_remove_num": "Enter account number to remove"
+        "enter_remove_num": "Enter account number to remove",
+        "login_account": "Login and capture new account",
+        "starting_login": "Starting official Gemini CLI... Please complete login in your browser.",
+        "login_success": "Login successful. Account captured:",
+        "login_failed": "Login failed or credentials not found.",
+        "backup_restored": "Original credentials restored.",
+        "pool_login": "Login to new account (Auto-Capture)"
     },
     "cn": {
-        "title": "GEMINI-CLI 账号管理器 v2.0",
+        "title": "GEMINI-CLI 账号管理器 v2.1",
         "subtitle": "快速切换 + 自动轮换 | By Besty",
         "status": "状态",
         "active": "活跃",
@@ -150,7 +198,6 @@ LANG = {
         "pool_mgmt": "账号池管理",
         "total": "共计",
         "options": "选项",
-        "add_account": "添加新账号",
         "remove_account": "删除账号",
         "import_creds": "导入凭证",
         "back": "返回主菜单",
@@ -180,7 +227,13 @@ LANG = {
         "file_not_found": "文件未找到",
         "imported": "已导入",
         "enter_path": "请输入凭证文件路径",
-        "enter_remove_num": "请输入要删除的账号编号"
+        "enter_remove_num": "请输入要删除的账号编号",
+        "login_account": "登录并捕获新账号",
+        "starting_login": "正在启动官方 Gemini CLI... 请在浏览器中完成登录操作。",
+        "login_success": "登录成功，账号已捕获：",
+        "login_failed": "登录失败或未找到凭证。",
+        "backup_restored": "原始凭证已恢复。",
+        "pool_login": "登录新账号 (自动捕获)"
     }
 }
 
@@ -553,8 +606,8 @@ def handle_pool(args):
         print(f"{UI.line('-', 50)}")
         print(f"  {t('total')}: {UI.CYAN}{len(profiles)}{UI.RESET}")
         print(f"\n{UI.BOLD}Commands:{UI.RESET}")
-        print(f"  gchange pool add              {t('add_account')}")
-        print(f"  gchange pool add <email>      {t('add_account')}")
+        print(f"  gchange pool login            {t('pool_login')}")
+        print(f"  gchange pool login <email>    {t('pool_login')}")
         print(f"  gchange pool remove <n>       {t('remove_account')}")
         print(f"  gchange pool import <path>    {t('import_creds')}")
         return
@@ -562,8 +615,8 @@ def handle_pool(args):
     subcmd = args[0].lower()
     subargs = args[1:]
     
-    if subcmd == "add":
-        add_account(subargs)
+    if subcmd == "login":
+        login_account(subargs)
     elif subcmd in ["remove", "delete", "rm"]:
         remove_account(subargs)
     elif subcmd == "import":
@@ -571,52 +624,6 @@ def handle_pool(args):
     else:
         print(f"{UI.RED}[Error] Unknown pool command: {subcmd}{UI.RESET}")
         print("Valid commands: add, remove, import")
-
-
-def add_account(args):
-    """Add a new account to the pool."""
-    if args:
-        email = args[0]
-    else:
-        try:
-            email = input(f"  Enter account email: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            return
-    
-    if not email or "@" not in email:
-        print(f"{UI.RED}[Error] Invalid email format.{UI.RESET}")
-        return
-    
-    # Create profile directory
-    profile_dir = PROFILES_DIR / email
-    
-    if profile_dir.exists():
-        print(f"{UI.YELLOW}[Warning] Account already exists: {email}{UI.RESET}")
-        return
-    
-    profile_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Check if current credentials should be used
-    if CREDS_FILE.exists():
-        try:
-            use_current = input(f"  Use current credentials for {email}? (y/N): ").strip().lower()
-            if use_current in ["y", "yes"]:
-                shutil.copy2(CREDS_FILE, profile_dir / "oauth_creds.json")
-                if ID_FILE.exists():
-                    shutil.copy2(ID_FILE, profile_dir / "google_account_id")
-                print(f"{UI.GREEN}[OK] Account added: {email}{UI.RESET}")
-                return
-        except (EOFError, KeyboardInterrupt):
-            print()
-            return
-    
-    # Create placeholder
-    print(f"{UI.YELLOW}[Info] Account directory created: {profile_dir}{UI.RESET}")
-    print(f"  To complete setup:")
-    print(f"  1. Login with Gemini CLI using this account")
-    print(f"  2. Run: gchange pool import <path_to_oauth_creds.json>")
-    print(f"  Or manually copy oauth_creds.json to: {profile_dir}")
 
 
 def remove_account(args):
@@ -726,6 +733,139 @@ def import_account(args):
         shutil.copy2(id_path, profile_dir / "google_account_id")
     
     print(f"{UI.GREEN}[OK] Imported: {email}{UI.RESET}")
+
+
+class OAuthCallbackHandler(BaseHTTPRequestHandler):
+    """Handles Google OAuth callback on localhost."""
+    def log_message(self, format, *args):
+        pass # Silent logging
+
+    def do_GET(self):
+        query = urlparse(self.path).query
+        params = parse_qs(query)
+        self.server.auth_code = params.get('code', [None])[0]
+        
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        
+        success_msg = """
+        <html>
+        <body style='font-family: sans-serif; text-align: center; padding: 50px;'>
+            <h1 style='color: #4CAF50;'>Authentication Successful!</h1>
+            <p>You can close this window and return to the application.</p>
+            <script>setTimeout(function() { window.close(); }, 2000);</script>
+        </body>
+        </html>
+        """
+        self.wfile.write(success_msg.encode('utf-8'))
+
+
+def login_account(args):
+    """Native Python OAuth flow to login and capture credentials to pool."""
+    # Find a free port
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('127.0.0.1', 0))
+        port = s.getsockname()[1]
+    
+    redirect_uri = f"http://localhost:{port}/oauth-callback"
+    
+    # Construct Auth URL
+    from urllib.parse import urlencode
+    auth_params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": " ".join(GOOGLE_SCOPES),
+        "access_type": "offline",
+        "prompt": "consent",
+        "include_granted_scopes": "true"
+    }
+    auth_url = f"{GOOGLE_AUTH_URL}?{urlencode(auth_params)}"
+    
+    UI.header()
+    print(f"\n{UI.CYAN}[OAuth] {t('starting_login')}{UI.RESET}")
+    print(f"{UI.DIM}  Redirect URI: {redirect_uri}{UI.RESET}")
+    print(f"\n  {UI.BOLD}Please open this URL if browser doesn't start:{UI.RESET}")
+    print(f"  {UI.CYAN}{auth_url}{UI.RESET}\n")
+    
+    # Start local server
+    server = HTTPServer(('127.0.0.1', port), OAuthCallbackHandler)
+    server.auth_code = None
+    
+    # Open browser
+    webbrowser.open(auth_url)
+    
+    # Wait for callback
+    print(f"  {UI.YELLOW}Waiting for authentication...{UI.RESET}")
+    try:
+        server.handle_request()
+    except KeyboardInterrupt:
+        print(f"\n  {UI.RED}Login cancelled.{UI.RESET}")
+        return
+
+    if not server.auth_code:
+        print(f"\n  {UI.RED}[Error] Failed to capture authorization code.{UI.RESET}")
+        return
+
+    print(f"  {UI.GREEN}Code captured. Exchanging for tokens...{UI.RESET}")
+    
+    # Exchange code for tokens
+    try:
+        # Use vs-code user agent as it might be required for this client_id
+        headers = {"User-Agent": "vscode/1.92.2"}
+        token_data = {
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "code": server.auth_code,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        }
+        
+        resp = requests.post(GOOGLE_TOKEN_URL, data=token_data, headers=headers)
+        resp.raise_for_status()
+        tokens = resp.json()
+        
+        # Get User Info (Email)
+        access_token = tokens.get("access_token")
+        user_resp = requests.get(
+            GOOGLE_USERINFO_URL, 
+            headers={"Authorization": f"Bearer {access_token}", "User-Agent": "vscode/1.92.2"}
+        )
+        user_resp.raise_for_status()
+        email = user_resp.json().get("email")
+        
+        if not email:
+            print(f"\n  {UI.RED}[Error] Could not retrieve account email.{UI.RESET}")
+            return
+
+        # Prepare credentials object
+        expiry_date = int((time.time() + tokens.get("expires_in", 3600)) * 1000)
+        creds_obj = {
+            "access_token": access_token,
+            "refresh_token": tokens.get("refresh_token"),
+            "scope": tokens.get("scope"),
+            "token_type": "Bearer",
+            "expiry_date": expiry_date
+        }
+        
+        # Save to profile
+        profile_dir = PROFILES_DIR / email
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        
+        with open(profile_dir / "oauth_creds.json", "w", encoding="utf-8") as f:
+            json.dump(creds_obj, f, indent=2)
+            
+        print(f"\n{UI.GREEN}[OK] {t('login_success')} {UI.BOLD}{email}{UI.RESET}")
+        print(f"  Credentials saved to: {profile_dir}")
+        
+    except Exception as e:
+        print(f"\n  {UI.RED}[Error] OAuth exchange failed: {e}{UI.RESET}")
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"  Response: {e.response.text}")
+
+    input(f"\n  {t('press_enter')}")
 
 
 def interactive_menu():
@@ -873,14 +1013,14 @@ def interactive_menu():
             print(f"  {UI.line('-', 40)}")
             print(f"  {t('total')}: {UI.CYAN}{len(profiles)}{UI.RESET}")
             print(f"\n  {t('options')}:")
-            print(f"  a. {t('add_account')}")
+            print(f"  l. {t('pool_login')}")
             print(f"  r. {t('remove_account')}")
             print(f"  i. {t('import_creds')}")
             print(f"  b. {t('back')}")
             try:
                 pool_choice = input(f"\n  {t('enter_choice')}: ").strip().lower()
-                if pool_choice == "a":
-                    add_account([])
+                if pool_choice == "l":
+                    login_account([])
                 elif pool_choice == "r":
                     acc = input(f"  {t('enter_remove_num')}: ").strip()
                     remove_account([acc])

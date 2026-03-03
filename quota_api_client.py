@@ -77,7 +77,7 @@ def call_load_code_assist(access_token):
                 is_windows = sys.platform == 'win32'
                 
                 subprocess.run(
-                    ["gemini", "models", "list", "--limit", "1"], 
+                    ["gemini", "-p", "/model list"], 
                     check=True, 
                     stdout=subprocess.DEVNULL, 
                     stderr=subprocess.DEVNULL,
