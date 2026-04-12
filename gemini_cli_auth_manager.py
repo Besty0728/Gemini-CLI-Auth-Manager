@@ -1018,8 +1018,14 @@ def main():
         list_status()
         return
     
-    command = sys.argv[1].lower()
-    args = sys.argv[2:]
+    # Handle combined command and sub-command if quoted
+    if " " in sys.argv[1]:
+        parts = sys.argv[1].split()
+        command = parts[0].lower()
+        args = parts[1:] + sys.argv[2:]
+    else:
+        command = sys.argv[1].lower()
+        args = sys.argv[2:]
     
     # Command routing
     if command == "next":
