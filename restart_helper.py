@@ -8,6 +8,7 @@ import sys
 import time
 import subprocess
 import argparse
+import shutil
 
 def restart_gemini(pid, delay):
     """
@@ -45,8 +46,11 @@ def restart_gemini(pid, delay):
                 close_fds=True
             )
         else:
-            # Linux/Mac (placeholder, mostly for Windows user)
-            subprocess.Popen(["gemini"], start_new_session=True)
+            gemini_cmd = shutil.which("gemini")
+            if not gemini_cmd:
+                print("[Restart Helper] Gemini CLI not found on PATH; restart skipped.", file=sys.stderr)
+                return
+            subprocess.Popen([gemini_cmd], start_new_session=True, close_fds=True)
             
     except Exception as e:
         print(f"[Restart Helper] Failed to start new instance: {e}", file=sys.stderr)

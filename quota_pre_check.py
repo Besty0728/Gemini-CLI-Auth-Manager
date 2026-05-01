@@ -18,6 +18,7 @@ import os
 import sys
 import subprocess
 import re
+import platform
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -29,6 +30,7 @@ GEMINI_DIR = Path(os.path.expanduser("~/.gemini"))
 OAUTH_CREDS_FILE = GEMINI_DIR / "oauth_creds.json"
 AUTH_CONFIG_FILE = GEMINI_DIR / "auth_config.json"
 QUOTA_CACHE_FILE = GEMINI_DIR / "quota_cache.json"
+MANAGER_SCRIPT = GEMINI_DIR / "gemini_cli_auth_manager.py"
 
 # Default configuration
 DEFAULT_THRESHOLD = 10 # 10% remaining triggers switch (integer percentage)
@@ -38,21 +40,50 @@ DEFAULT_STRATEGY = "gemini3.1-series-only"
 DEFAULT_PATTERN = "gemini-3.1.*"
 
 
+def normalize_threshold(value):
+    """Accept config thresholds as either percent integers or fractions."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        value = DEFAULT_THRESHOLD
+    return value / 100 if value > 1 else value
+
+
 def log(message, level="INFO"):
     """Write log message to stderr (visible in Gemini CLI debug)."""
     timestamp = datetime.now().strftime("%H:%M:%S")
     print(f"[{timestamp}] [quota-pre-check] [{level}] {message}", file=sys.stderr)
 
 
+def code_assist_platform():
+    """Return the Gemini CLI platform metadata for the current OS/CPU."""
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        arch = "AMD64"
+    elif machine in ("arm64", "aarch64"):
+        arch = "ARM64"
+    else:
+        return "PLATFORM_UNSPECIFIED"
+
+    if sys.platform == "win32":
+        return "WINDOWS_AMD64" if arch == "AMD64" else "PLATFORM_UNSPECIFIED"
+    if sys.platform == "darwin":
+        return f"DARWIN_{arch}"
+    if sys.platform.startswith("linux"):
+        return f"LINUX_{arch}"
+    return "PLATFORM_UNSPECIFIED"
+
+
 def load_config():
     """Load configuration from auth_config.json."""
     config = {
-        "threshold": DEFAULT_THRESHOLD,
+        "threshold": DEFAULT_THRESHOLD / 100,
         "models_to_check": DEFAULT_MODELS_TO_CHECK,
         "enabled": True,
         "cache_minutes": DEFAULT_CACHE_MINUTES,
         "strategy": DEFAULT_STRATEGY,
         "model_pattern": DEFAULT_PATTERN,
+        "custom_model_pattern": "",
     }
     
     if AUTH_CONFIG_FILE.exists():
@@ -60,12 +91,13 @@ def load_config():
             with open(AUTH_CONFIG_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 auto_switch = data.get("auto_switch", {})
-                config["threshold"] = auto_switch.get("threshold", DEFAULT_THRESHOLD * 100) / 100
+                config["threshold"] = normalize_threshold(auto_switch.get("threshold", DEFAULT_THRESHOLD))
                 config["enabled"] = auto_switch.get("enabled", True)
                 config["models_to_check"] = auto_switch.get("models_to_check", DEFAULT_MODELS_TO_CHECK)
                 config["cache_minutes"] = auto_switch.get("cache_minutes", DEFAULT_CACHE_MINUTES)
                 config["strategy"] = auto_switch.get("strategy", DEFAULT_STRATEGY)
                 config["model_pattern"] = auto_switch.get("model_pattern", DEFAULT_PATTERN) # pattern for gemini3-first
+                config["custom_model_pattern"] = auto_switch.get("custom_model_pattern", "")
         except:
             pass
     
@@ -147,7 +179,7 @@ def get_project_id(access_token):
     payload = {
         "metadata": {
             "ideType": "GEMINI_CLI",
-            "platform": "WINDOWS_AMD64",
+            "platform": code_assist_platform(),
             "pluginType": "GEMINI",
         }
     }
@@ -275,10 +307,14 @@ def check_quota(config, session_id):
 
 
 def switch_account():
-    """Call gchange next to switch account."""
+    """Call the installed manager directly to switch accounts."""
+    if not MANAGER_SCRIPT.exists():
+        log(f"Manager script not found: {MANAGER_SCRIPT}", "ERROR")
+        return False
+
     try:
         result = subprocess.run(
-            ["gchange", "next"],
+            [sys.executable, str(MANAGER_SCRIPT), "next"],
             capture_output=True,
             text=True,
             timeout=10
@@ -294,7 +330,7 @@ def switch_account():
             log(f"Account switch failed: {result.stderr}", "ERROR")
             return False
     except Exception as e:
-        log(f"Failed to call gchange: {e}", "ERROR")
+        log(f"Failed to call auth manager: {e}", "ERROR")
         return False
 
 

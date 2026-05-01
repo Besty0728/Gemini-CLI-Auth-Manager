@@ -1,7 +1,7 @@
 # Gemini CLI 账号管理器
 
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
-![Platform](https://img.shields.io/badge/platform-Windows-yellow.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-yellow.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Version](https://img.shields.io/badge/version-2.3-brightgreen.svg)
 
@@ -38,6 +38,15 @@ python install.py
 ### 依赖要求
 - Python 3.8+
 - `requests` 库 (`pip install requests`)
+- Gemini CLI 已安装，并可通过 PATH 中的 `gemini` 命令调用
+
+### Linux/macOS 说明
+- 安装器会创建 `~/.gemini/gchange`，并在可行时链接到 `~/.local/bin/gchange`。
+- 如果安装后找不到 `gchange` 命令，请把下面内容加入你的 shell 配置：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
 
 ---
 
@@ -52,7 +61,7 @@ python install.py
 | `/change strategy` | 查看或更改轮换策略 |
 | `/change config` | 快速查看自动切换配置 |
 
-### 2. 终端命令 (CMD/PowerShell)
+### 2. 终端命令
 | 命令 | 说明 |
 | :--- | :--- |
 | `gchange` | 列出所有账号及当前状态 |
@@ -71,7 +80,7 @@ python install.py
 | `strategy` | `gemini3.1-series-only` | 可选：`conservative`, `gemini3.1-pro-only`, `gemini3.1-series-only`, `custom` |
 | `threshold` | `10` | 剩余配额低于 10% 时触发切换 |
 | `model_pattern` | `gemini-3.1.*` | 用于匹配监控模型的正则表达式 |
-| `auto_restart` | `false` | 切换后是否自动重启 CLI (仅 Windows) |
+| `auto_restart` | `false` | 切换后是否自动重启 CLI，取决于当前平台能否启动 `gemini` |
 
 ---
 
