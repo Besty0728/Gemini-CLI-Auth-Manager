@@ -1,7 +1,7 @@
 # Gemini CLI Auth Manager
 
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
-![Platform](https://img.shields.io/badge/platform-Windows-yellow.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-yellow.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Version](https://img.shields.io/badge/version-2.3-brightgreen.svg)
 
@@ -38,6 +38,15 @@ python install.py
 ### Dependencies
 - Python 3.8+
 - `requests` library (`pip install requests`)
+- Gemini CLI available as `gemini` on your PATH
+
+### Linux/macOS Notes
+- The installer creates `~/.gemini/gchange` and links it as `~/.local/bin/gchange` when possible.
+- If `gchange` is not found after installation, add this to your shell profile:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
 
 ---
 
@@ -52,7 +61,7 @@ python install.py
 | `/change strategy` | View or change rotation strategy |
 | `/change config` | Quick view of auto-switch configuration |
 
-### 2. Terminal Commands (CMD/PowerShell)
+### 2. Terminal Commands
 | Command | Description |
 | :--- | :--- |
 | `gchange` | List all accounts and status |
@@ -71,7 +80,7 @@ Settings are stored in `~/.gemini/auth_config.json`.
 | `strategy` | `gemini3.1-series-only` | `conservative`, `gemini3.1-pro-only`, `gemini3.1-series-only`, `custom` |
 | `threshold` | `10` | Switch account when remaining quota < 10% |
 | `model_pattern` | `gemini-3.1.*` | Regex pattern for model monitoring |
-| `auto_restart` | `false` | Automatically restart CLI after a switch (Windows only) |
+| `auto_restart` | `false` | Automatically restart CLI after a switch when the current platform can launch `gemini` |
 
 ---
 

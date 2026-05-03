@@ -570,7 +570,7 @@ def handle_config(args):
         return
     
     key = args[0].lower()
-    valid_keys = ["enabled", "strategy", "model_pattern", "threshold", "max_retries", "notify_on_switch", "cache_minutes", "models_to_check"]
+    valid_keys = ["enabled", "strategy", "model_pattern", "threshold", "max_retries", "notify_on_switch", "auto_restart", "cache_minutes", "models_to_check"]
     
     if key not in valid_keys:
         print(f"{UI.RED}[Error] Invalid config key: {key}{UI.RESET}")
@@ -585,7 +585,7 @@ def handle_config(args):
     value = args[1]
     
     # Type conversion
-    if key in ["enabled", "notify_on_switch"]:
+    if key in ["enabled", "notify_on_switch", "auto_restart"]:
         value = value.lower() in ["true", "1", "yes", "on"]
     elif key in ["threshold", "max_retries", "cache_minutes"]:
         try:

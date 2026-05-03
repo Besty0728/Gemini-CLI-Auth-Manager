@@ -188,10 +188,15 @@ def should_switch_by_strategy(config, model_usage=None):
 
 
 def switch_to_next():
-    """Call gchange next to switch account."""
+    """Call the installed manager directly to switch accounts."""
+    manager_script = GEMINI_DIR / "gemini_cli_auth_manager.py"
+    if not manager_script.exists():
+        log(f"[Auth Manager] Manager script not found: {manager_script}")
+        return None
+
     try:
         result = subprocess.run(
-            ["python", str(GEMINI_DIR / "gemini_cli_auth_manager.py"), "next"],
+            [sys.executable, str(manager_script), "next"],
             capture_output=True,
             text=True,
             timeout=10
@@ -342,4 +347,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

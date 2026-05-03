@@ -5,6 +5,7 @@ Gemini CLI 配额查询 API 客户端
 """
 import json
 import os
+import platform
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -20,6 +21,25 @@ CODE_ASSIST_API_VERSION = "v1internal"
 
 GEMINI_DIR = Path(os.path.expanduser("~/.gemini"))
 OAUTH_CREDS_FILE = GEMINI_DIR / "oauth_creds.json"
+
+
+def code_assist_platform():
+    """Return the Gemini CLI platform metadata for the current OS/CPU."""
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        arch = "AMD64"
+    elif machine in ("arm64", "aarch64"):
+        arch = "ARM64"
+    else:
+        return "PLATFORM_UNSPECIFIED"
+
+    if sys.platform == "win32":
+        return "WINDOWS_AMD64" if arch == "AMD64" else "PLATFORM_UNSPECIFIED"
+    if sys.platform == "darwin":
+        return f"DARWIN_{arch}"
+    if sys.platform.startswith("linux"):
+        return f"LINUX_{arch}"
+    return "PLATFORM_UNSPECIFIED"
 
 
 def load_oauth_token():
@@ -55,7 +75,7 @@ def call_load_code_assist(access_token):
     payload = {
         "metadata": {
             "ideType": "GEMINI_CLI",
-            "platform": "WINDOWS_AMD64",
+            "platform": code_assist_platform(),
             "pluginType": "GEMINI",
         }
     }

@@ -5,6 +5,7 @@ Installs account manager with optional auto-switch hook.
 """
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -88,6 +89,56 @@ def add_to_path(target_dir):
         print(f"Please manually add this folder to your PATH: {target_str}")
 
 
+def command_string(args):
+    """Return a shell command string for Gemini hook configuration."""
+    args = [str(arg) for arg in args]
+    if sys.platform == "win32":
+        return subprocess.list2cmdline(args)
+    return shlex.join(args)
+
+
+def toml_string(value):
+    """Encode a string as a TOML basic string."""
+    return json.dumps(value, ensure_ascii=False)
+
+
+def create_unix_launcher(gemini_dir, target_script):
+    """Create a Unix launcher and expose it from ~/.local/bin when possible."""
+    launcher = gemini_dir / "gchange"
+    launcher_content = (
+        "#!/bin/sh\n"
+        f"exec {shlex.quote(sys.executable)} {shlex.quote(str(target_script))} \"$@\"\n"
+    )
+
+    with open(launcher, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(launcher_content)
+    launcher.chmod(0o755)
+    print(f"[OK] Unix launcher created: {launcher}")
+
+    user_bin = Path.home() / ".local" / "bin"
+    try:
+        user_bin.mkdir(parents=True, exist_ok=True)
+        bin_launcher = user_bin / "gchange"
+
+        if bin_launcher.exists() or bin_launcher.is_symlink():
+            if bin_launcher.is_symlink() and bin_launcher.resolve() == launcher:
+                print(f"[Skip] PATH launcher already configured: {bin_launcher}")
+            else:
+                print(f"[Warning] PATH launcher already exists: {bin_launcher}")
+                print(f"          Use this command manually if needed: {launcher}")
+        else:
+            bin_launcher.symlink_to(launcher)
+            print(f"[OK] PATH launcher linked: {bin_launcher}")
+
+        path_entries = os.environ.get("PATH", "").split(os.pathsep)
+        if str(user_bin) not in path_entries:
+            print(f"[Info] Add this to your shell profile if 'gchange' is not found:")
+            print(f"       export PATH=\"$HOME/.local/bin:$PATH\"")
+    except OSError as e:
+        print(f"[Warning] Could not configure ~/.local/bin/gchange: {e}")
+        print(f"          Run directly with: {launcher}")
+
+
 def update_settings_json(gemini_dir, after_agent_hook, before_agent_hook=None):
     """Update or create settings.json with hook configurations (official format)."""
     settings_file = gemini_dir / "settings.json"
@@ -109,7 +160,7 @@ def update_settings_json(gemini_dir, after_agent_hook, before_agent_hook=None):
     after_hook_def = {
         "name": "quota-auto-switch",
         "type": "command",
-        "command": f'python {after_agent_hook.as_posix()}',
+        "command": command_string([sys.executable, after_agent_hook]),
         "timeout": 10000,
         "description": "Auto-switch account when quota exhausted"
     }
@@ -134,7 +185,7 @@ def update_settings_json(gemini_dir, after_agent_hook, before_agent_hook=None):
         before_hook_def = {
             "name": "quota-pre-check",
             "type": "command",
-            "command": f'python {before_agent_hook.as_posix()}',
+            "command": command_string([sys.executable, before_agent_hook]),
             "timeout": 10000,
             "description": "Pre-check and switch if last request failed"
         }
@@ -191,6 +242,7 @@ def install():
     target_pre_check = hooks_dir / "quota_pre_check.py"
     target_config = gemini_dir / "auth_config.json"
     target_bat = gemini_dir / "gchange.bat"
+    target_launcher = gemini_dir / "gchange"
     target_toml = commands_dir / "change.toml"
 
     print(f"\nTarget Directory: {gemini_dir}")
@@ -208,19 +260,29 @@ def install():
         print(f"[Error] Source file not found: {core_script}")
         return
 
-    # 5. Create Batch Launcher
-    bat_content = '@echo off\r\npython "%USERPROFILE%\\.gemini\\gemini_cli_auth_manager.py" %*'
-    try:
-        with open(target_bat, 'w', encoding='utf-8') as f:
-            f.write(bat_content)
-        print(f"[OK] Batch launcher created: {target_bat.name}")
-    except Exception as e:
-        print(f"[Error] Creating batch file: {e}")
+    # 5. Create Platform Launcher
+    if sys.platform == "win32":
+        bat_content = (
+            '@echo off\r\n'
+            f'{subprocess.list2cmdline([sys.executable, str(target_script)])} %*'
+        )
+        try:
+            with open(target_bat, 'w', encoding='utf-8') as f:
+                f.write(bat_content)
+            print(f"[OK] Batch launcher created: {target_bat.name}")
+        except Exception as e:
+            print(f"[Error] Creating batch file: {e}")
+    else:
+        try:
+            create_unix_launcher(gemini_dir, target_script)
+        except Exception as e:
+            print(f"[Error] Creating Unix launcher {target_launcher}: {e}")
 
     # 6. Create TOML Command
+    prompt_command = command_string([sys.executable, target_script]) + " {{args}}"
     toml_content = (
-        f'description = "{texts["desc"]}"\n'
-        f'prompt = "!{{python \\"{target_script.as_posix()}\\" {{{{args}}}}}}"\n'
+        f'description = {toml_string(texts["desc"])}\n'
+        f'prompt = {toml_string(f"!{{{prompt_command}}}")}\n'
     )
     try:
         with open(target_toml, 'w', encoding='utf-8') as f:
