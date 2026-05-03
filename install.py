@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gemini CLI Auth Manager v2.3 - Installer
+Gemini CLI Auth Manager v2.4 - Installer
 Installs account manager with optional auto-switch hook.
 """
 import json
@@ -216,7 +216,7 @@ def update_settings_json(gemini_dir, after_agent_hook, before_agent_hook=None):
 
 def install():
     print("=" * 50)
-    print("   Gemini-CLI-Auth-Manager v2.3 Installer")
+    print("   Gemini-CLI-Auth-Manager v2.4 Installer")
     print("   Fast Switching + Auto Rotation Support")
     print("=" * 50)
 

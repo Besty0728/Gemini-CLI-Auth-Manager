@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-yellow.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Version](https://img.shields.io/badge/version-2.3-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.4-brightgreen.svg)
 
 **Gemini CLI Auth Manager** is a lightweight tool designed for the Google Gemini CLI environment. It supports instant multi-account switching, **automatic rotation on quota exhaustion**, and **unified account pool management**!
 
@@ -104,6 +104,11 @@ Settings are stored in `~/.gemini/auth_config.json`.
 ---
 
 ## 📅 Changelog
+
+### [v2.4] - 2026-05-03
+- **🌍 Cross-Platform**: Added Linux and macOS compatibility — Unix launcher, dynamic platform detection, `sys.executable` for subprocess calls. (Thanks @bincat233)
+- **🛠 Fix**: Handle quoted combined commands like `'pool login'` correctly. (Thanks @victorinfinops)
+- **🛠 Fix**: `auto_restart` config key can now be set via `gchange config`.
 
 ### [v2.3] - 2026-03-22
 - **✨ Enhancement**: Fully updated UI and internal logic to version 2.3.
