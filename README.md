@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-yellow.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Version](https://img.shields.io/badge/version-2.4-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.5-brightgreen.svg)
 
 **Gemini CLI Auth Manager** is a lightweight tool designed for the Google Gemini CLI environment. It supports instant multi-account switching, **automatic rotation on quota exhaustion**, and **unified account pool management**!
 
@@ -31,7 +31,7 @@
 
 ```bash
 git clone https://github.com/Besty0728/Gemini-CLI-Auth-Manager.git
-cd gemini-auth-manager
+cd Gemini-CLI-Auth-Manager
 python install.py
 ```
 
@@ -104,6 +104,9 @@ Settings are stored in `~/.gemini/auth_config.json`.
 ---
 
 ## 📅 Changelog
+
+### [v2.5] - 2026-05-06
+- **🛠 Fix**: Corrected the directory name in the installation instructions (`cd Gemini-CLI-Auth-Manager`) so the steps work on case-sensitive systems like Linux and macOS. (Thanks @getbot887, closes #5)
 
 ### [v2.4] - 2026-05-03
 - **🌍 Cross-Platform**: Added Linux and macOS compatibility — Unix launcher, dynamic platform detection, `sys.executable` for subprocess calls. (Thanks @bincat233)

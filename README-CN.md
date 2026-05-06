@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-yellow.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Version](https://img.shields.io/badge/version-2.4-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.5-brightgreen.svg)
 
 **Gemini CLI 账号管理器** 是一个专为 Google Gemini CLI 环境设计的轻量级工具。它支持极速多账号切换、**配额耗尽自动轮换**，以及**统一的账号池管理**！
 
@@ -31,7 +31,7 @@
 
 ```bash
 git clone https://github.com/Besty0728/Gemini-CLI-Auth-Manager.git
-cd gemini-auth-manager
+cd Gemini-CLI-Auth-Manager
 python install.py
 ```
 
@@ -104,6 +104,9 @@ export PATH="$HOME/.local/bin:$PATH"
 ---
 
 ## 📅 更新日志 (Changelog)
+
+### [v2.5] - 2026-05-06
+- **🛠 修复**: 修正安装说明中的目录名（`cd Gemini-CLI-Auth-Manager`），确保在 Linux 和 macOS 等大小写敏感系统上步骤可正确执行。（感谢 @getbot887，closes #5）
 
 ### [v2.4] - 2026-05-03
 - **🌍 跨平台**: 新增 Linux 和 macOS 兼容性 — Unix 启动器、动态平台检测、子进程调用使用 `sys.executable`。（感谢 @bincat233）
