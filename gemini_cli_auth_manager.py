@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gemini CLI Auth Manager v2.5
+Gemini CLI Auth Manager v2.6
 Fast account switching with auto-rotation support for Gemini CLI.
 """
 import json
@@ -72,7 +72,7 @@ GOOGLE_SCOPES = [
 # --- Language Dictionary ---
 LANG = {
     "en": {
-        "title": "GEMINI-CLI-AUTH-MANAGER v2.5",
+        "title": "GEMINI-CLI-AUTH-MANAGER v2.6",
         "subtitle": "Fast Switcher + Auto Rotation | By Besty",
         "status": "STATUS",
         "active": "ACTIVE",
@@ -160,7 +160,7 @@ LANG = {
         "uninstall_restart": "Please restart your terminal for PATH changes to take effect"
     },
     "cn": {
-        "title": "GEMINI CLI 账号管理器 v2.5",
+        "title": "GEMINI CLI 账号管理器 v2.6",
         "subtitle": "极速切换 + 自动轮换 | By Besty",
         "status": "状态",
         "active": "正在使用",
