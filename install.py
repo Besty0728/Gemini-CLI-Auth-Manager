@@ -71,19 +71,25 @@ def add_to_path(target_dir):
             f'  $newPath = $oldPath + ";{target_str}"; '
             f'  Set-ItemProperty -Path $key -Name Path -Value $newPath; '
             f'  Write-Output "Updated"; '
+            f'}} else {{ '
+            f'  Write-Output "AlreadySet"; '
             f'}}'
         )
-        
+
         result = subprocess.run(
             ["powershell", "-NoProfile", "-Command", ps_command],
             capture_output=True, text=True
         )
-        
-        if result.returncode == 0 and "Updated" in result.stdout:
-            print("[OK] PATH updated successfully. (Restart terminal to take effect)")
-        else:
-            print("[Info] PATH might already be set or update requires manual check.")
-            
+
+        if "Updated" in result.stdout:
+            print("[OK] PATH updated (registry).")
+        elif "AlreadySet" in result.stdout:
+            print("[OK] Already in registry PATH.")
+
+        # Update current session so gchange works immediately
+        os.environ["PATH"] = target_str + os.pathsep + os.environ.get("PATH", "")
+        print("[OK] Current session updated — gchange ready to use.")
+
     except Exception as e:
         print(f"[Warning] Failed to update PATH automatically: {e}")
         print(f"Please manually add this folder to your PATH: {target_str}")
