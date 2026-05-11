@@ -230,7 +230,7 @@ def install():
     gemini_dir = user_home / ".gemini"
     commands_dir = gemini_dir / "commands"
     hooks_dir = gemini_dir / "hooks"
-    
+
     # Source files
     core_script = source_dir / "gemini_cli_auth_manager.py"
     hook_script = source_dir / "quota_auto_switch.py"  # AfterAgent hook
@@ -295,7 +295,7 @@ def install():
     print()
     enable_auto = input(texts['ask_auto']).strip().lower()
     enable_auto = enable_auto in ['', 'y', 'yes', '是']
-    
+
     # Create or update config with language setting
     config_data = {}
     if target_config.exists():
@@ -304,7 +304,7 @@ def install():
                 config_data = json.load(f)
         except:
             pass
-    
+
     # Set language based on user selection
     config_data["language"] = lang_key
 
@@ -325,13 +325,13 @@ def install():
             print(f"[OK] AfterAgent hook installed: {target_hook.name}")
         else:
             print(f"[Warning] AfterAgent hook not found: {hook_script}")
-        
+
         if pre_check_script.exists():
             shutil.copy2(pre_check_script, target_pre_check)
             print(f"[OK] BeforeAgent hook installed: {target_pre_check.name}")
         else:
             print(f"[Warning] BeforeAgent hook not found: {pre_check_script}")
-            
+
         # Copy restart helper
         helper_script = source_dir / "restart_helper.py"
         target_helper = gemini_dir / "restart_helper.py"
@@ -340,7 +340,7 @@ def install():
             print(f"[OK] Restart helper installed: {target_helper.name}")
         else:
             print(f"[Warning] Restart helper not found: {helper_script}")
-        
+
         # Update auto_switch config
         if "auto_switch" not in config_data:
             config_data["auto_switch"] = {
@@ -353,7 +353,7 @@ def install():
                 "auto_restart": False,
                 "cache_minutes": 3
             }
-        
+
         # --- NEW: Add Default OAuth Client Info ---
         # Obfuscated to bypass GitHub secret scanning for public desktop client credentials
         if "oauth_client" not in config_data:
@@ -362,11 +362,11 @@ def install():
                 "client_secret": "GOCSPX" + "-4uHgMPm-1o7Sk-geV6Cu5clXFsxl"
             }
         # ------------------------------------------
-        
+
         # Update settings.json with both hooks
         if update_settings_json(gemini_dir, target_hook, target_pre_check):
             print(texts['hook_ok'])
-            
+
         # --- NEW: Set Environment Variable for Cache Control ---
         # Force Gemini CLI to use file storage on Windows so we can clear the cache file
         # We use setx to make it persistent for future sessions
@@ -374,11 +374,11 @@ def install():
             print("[Setup] Setting GEMINI_FORCE_FILE_STORAGE=true (User Level)...")
             # setx returns 0 on success
             subprocess.run('setx GEMINI_FORCE_FILE_STORAGE "true"', check=False, shell=True)
-            os.environ["GEMINI_FORCE_FILE_STORAGE"] = "true" 
+            os.environ["GEMINI_FORCE_FILE_STORAGE"] = "true"
         # -----------------------------------------------------
     else:
         print(texts['hook_skip'])
-    
+
     # Save config (always, to preserve language setting)
     with open(target_config, 'w', encoding='utf-8') as f:
         json.dump(config_data, f, indent=2, ensure_ascii=False)
@@ -396,14 +396,159 @@ def install():
     if enable_auto:
         print(texts['msg_auto'])
     print("=" * 50)
-    
+
     print("\n📋 Quick Reference:")
     print("  gchange              - List all accounts")
     print("  gchange <n>          - Switch to account #n")
     print("  gchange next         - Switch to next account")
     print("  gchange strategy     - View/change rotation strategy")
     print("  gchange config       - View/change auto-switch config")
+    print("  gchange uninstall    - Uninstall this tool")
+
+
+# --- Uninstall ---
+def uninstall():
+    """Uninstall Gemini CLI Auth Manager completely."""
+    gemini_dir = Path.home() / ".gemini"
+
+    print("=" * 50)
+    print("   Gemini-CLI-Auth-Manager — UNINSTALL")
+    print("=" * 50)
+    print(f"\nTarget Directory: {gemini_dir}")
+
+    files_to_remove = [
+        gemini_dir / "gemini_cli_auth_manager.py",
+        gemini_dir / "gchange.bat",
+        gemini_dir / "auth_config.json",
+        gemini_dir / "restart_helper.py",
+        gemini_dir / "commands" / "change.toml",
+        gemini_dir / "hooks" / "quota_auto_switch.py",
+        gemini_dir / "hooks" / "quota_pre_check.py",
+    ]
+
+    print("\nFiles to remove:")
+    for f in files_to_remove:
+        if f.exists():
+            print(f"  [REMOVE] {f.name}")
+        else:
+            print(f"  [NONE  ] {f.name} (not found)")
+
+    # Account data
+    profiles_dir = gemini_dir / "auth_profiles"
+    accounts_json = gemini_dir / "google_accounts.json"
+    has_data = profiles_dir.exists() or accounts_json.exists()
+    if has_data:
+        print("\nAccount data (will also be removed):")
+        if profiles_dir.exists():
+            print(f"  [REMOVE] {profiles_dir}")
+        if accounts_json.exists():
+            print(f"  [REMOVE] {accounts_json}")
+
+    print("\nWill also clean:")
+    print("  - settings.json hooks")
+    print("  - GEMINI_FORCE_FILE_STORAGE variable")
+
+    try:
+        confirm = input("\nProceed with uninstall? (y/N): ").strip().lower()
+        if confirm not in ["y", "yes"]:
+            print("Cancelled.")
+            return
+    except (EOFError, KeyboardInterrupt):
+        print("\nCancelled.")
+        return
+
+    print("\nRemoving files...")
+    removed = 0
+    for f in files_to_remove:
+        if f.exists():
+            try:
+                if f.is_dir():
+                    shutil.rmtree(f)
+                else:
+                    f.unlink()
+                removed += 1
+                print(f"  [OK] Removed: {f.name}")
+            except OSError as e:
+                print(f"  [FAIL] {f.name}: {e}")
+
+    print(f"\nRemoved {removed} file(s).")
+
+    # Remove account data
+    if profiles_dir.exists():
+        try:
+            shutil.rmtree(profiles_dir)
+            print("[OK] Removed account profiles.")
+        except OSError as e:
+            print(f"[FAIL] Failed to remove profiles: {e}")
+    if accounts_json.exists():
+        try:
+            accounts_json.unlink()
+            print("[OK] Removed account tracking.")
+        except OSError as e:
+            print(f"[FAIL] Failed to remove account tracking: {e}")
+
+    # Clean settings.json
+    settings_file = gemini_dir / "settings.json"
+    if settings_file.exists():
+        try:
+            with open(settings_file, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+        except:
+            settings = {}
+        modified = False
+        if "hooks" in settings:
+            target_names = ["quota-auto-switch", "quota-pre-check"]
+            target_scripts = ["quota_auto_switch", "quota_pre_check"]
+            for hook_type in ["AfterAgent", "BeforeAgent"]:
+                if hook_type not in settings["hooks"]:
+                    continue
+                new_entries = []
+                for entry in settings["hooks"][hook_type]:
+                    hooks = entry.get("hooks", [])
+                    filtered = [
+                        h for h in hooks
+                        if h.get("name") not in target_names
+                        and not any(ts in h.get("command", "") for ts in target_scripts)
+                    ]
+                    if filtered:
+                        entry["hooks"] = filtered
+                        new_entries.append(entry)
+                    else:
+                        modified = True
+                if new_entries != settings["hooks"].get(hook_type, []):
+                    modified = True
+                settings["hooks"][hook_type] = new_entries
+            settings["hooks"] = {k: v for k, v in settings["hooks"].items() if v}
+            if not settings["hooks"]:
+                del settings["hooks"]
+                modified = True
+        if modified:
+            with open(settings_file, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, indent=2, ensure_ascii=False)
+            print("[OK] Cleaned settings.json hooks.")
+        else:
+            print("[OK] No hooks to clean in settings.json.")
+
+    # Remove environment variable
+    if sys.platform == "win32":
+        try:
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "[Environment]::SetEnvironmentVariable('GEMINI_FORCE_FILE_STORAGE', $null, 'User')"],
+                capture_output=True, text=True
+            )
+            print("[OK] Removed GEMINI_FORCE_FILE_STORAGE.")
+        except Exception as e:
+            print(f"[WARN] Could not remove env var: {e}")
+
+    print("\n" + "=" * 50)
+    print("  Uninstall Complete!")
+    print("  Please restart your terminal for PATH changes to take effect.")
+    print("=" * 50)
 
 
 if __name__ == "__main__":
-    install()
+    if len(sys.argv) > 1 and sys.argv[1] in ("--uninstall", "-u", "uninstall"):
+        uninstall()
+    else:
+        install()

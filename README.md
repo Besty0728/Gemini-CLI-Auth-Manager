@@ -68,6 +68,7 @@ export PATH="$HOME/.local/bin:$PATH"
 | `gchange <n>` | Fast switch to account #n |
 | `gchange menu` | Open interactive menu (Recommended) |
 | `gchange pool login` | Add a new account via OAuth |
+| `gchange uninstall` | Uninstall this tool |
 
 ---
 
@@ -125,6 +126,35 @@ Settings are stored in `~/.gemini/auth_config.json`.
 - **⚡ Auto-Rotation**: Implemented automatic account switching based on quota pre-checks.
 
 ---
+
+## 🗑 Uninstall
+
+One-command cleanup removes all installed files:
+
+```bash
+# Interactive uninstall (shows what will be removed, asks for confirmation)
+gchange uninstall
+
+# Skip confirmation
+gchange uninstall --force
+
+# Keep account data (profiles + tracking)
+gchange uninstall --keep-accounts
+```
+
+Alternatively, run from the source directory:
+
+```bash
+python install.py --uninstall
+```
+
+**What gets removed:**
+- Core script, CLI launcher, slash command, hook scripts, config file
+- Auto-switch hooks from `settings.json` (other settings preserved)
+- `GEMINI_FORCE_FILE_STORAGE` environment variable
+- Account data (profiles + tracking) — unless `--keep-accounts` is used
+
+> PATH entries are intentionally left untouched, as `~/.gemini` may be shared with Gemini CLI itself.
 
 ## ❤️ Credits
 Developed by Besty. Feel free to submit Issues or PRs!

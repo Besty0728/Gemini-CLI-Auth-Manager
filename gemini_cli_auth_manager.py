@@ -140,7 +140,24 @@ LANG = {
         "enter_path": "Enter path to credentials file",
         "back": "Back",
         "active": "Active",
-        "standby": "Standby"
+        "standby": "Standby",
+        "uninstall_title": "UNINSTALL",
+        "uninstall_files": "Files to remove",
+        "uninstall_data": "Account data to remove",
+        "uninstall_also": "Also cleaned",
+        "uninstall_proceed": "Proceed with uninstall? (y/N): ",
+        "uninstall_cancelled": "Cancelled",
+        "uninstall_removing": "Removing files...",
+        "uninstall_removed": "Removed {} file(s)",
+        "uninstall_removed_profiles": "Removed account profiles",
+        "uninstall_removed_tracking": "Removed account tracking",
+        "uninstall_cleaned_hooks": "Cleaned settings.json hooks",
+        "uninstall_no_hooks": "No hooks to clean in settings.json",
+        "uninstall_removed_path": "Removed from PATH",
+        "uninstall_path_not_found": "PATH entry not found",
+        "uninstall_removed_env": "Removed GEMINI_FORCE_FILE_STORAGE",
+        "uninstall_complete": "Uninstall Complete!",
+        "uninstall_restart": "Please restart your terminal for PATH changes to take effect"
     },
     "cn": {
         "title": "GEMINI CLI 账号管理器 v2.5",
@@ -211,7 +228,24 @@ LANG = {
         "enter_path": "请输入凭据文件路径",
         "back": "返回",
         "active": "正在使用",
-        "standby": "待命"
+        "standby": "待命",
+        "uninstall_title": "卸载",
+        "uninstall_files": "待删除文件",
+        "uninstall_data": "待删除账号数据",
+        "uninstall_also": "同时清理",
+        "uninstall_proceed": "确认执行卸载？(y/N): ",
+        "uninstall_cancelled": "已取消",
+        "uninstall_removing": "正在删除文件...",
+        "uninstall_removed": "已删除 {} 个文件",
+        "uninstall_removed_profiles": "已删除账号配置",
+        "uninstall_removed_tracking": "已删除账号追踪",
+        "uninstall_cleaned_hooks": "已清理 settings.json 钩子",
+        "uninstall_no_hooks": "settings.json 中无钩子需清理",
+        "uninstall_removed_path": "已从 PATH 中移除",
+        "uninstall_path_not_found": "PATH 中未找到条目",
+        "uninstall_removed_env": "已移除 GEMINI_FORCE_FILE_STORAGE",
+        "uninstall_complete": "卸载完成！",
+        "uninstall_restart": "请重启终端以使 PATH 变更生效"
     }
 }
 class UI:
@@ -475,6 +509,7 @@ def list_status():
     print(f"  gchange pool               Manage account pool")
     print(f"  gchange strategy [name]    View/set strategy")
     print(f"  gchange config [key] [val] View/set config")
+    print(f"  gchange uninstall           Uninstall this tool")
     print(f"\n{UI.CYAN}{UI.line('=')}{UI.RESET}\n")
 
 
@@ -890,6 +925,170 @@ def login_account(args):
     input(f"\n  {t('press_enter')}")
 
 
+# --- Uninstall Functions ---
+def _clean_settings_json():
+    """Remove quota-auto-switch and quota-pre-check hooks from settings.json."""
+    settings_file = GEMINI_DIR / "settings.json"
+    if not settings_file.exists():
+        print(f"    {UI.DIM}{t('uninstall_no_hooks')}{UI.RESET}")
+        return
+
+    try:
+        with open(settings_file, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+    except Exception:
+        print(f"    {UI.DIM}{t('uninstall_no_hooks')}{UI.RESET}")
+        return
+
+    if "hooks" not in settings:
+        print(f"    {UI.DIM}{t('uninstall_no_hooks')}{UI.RESET}")
+        return
+
+    modified = False
+    target_names = ["quota-auto-switch", "quota-pre-check"]
+    target_scripts = ["quota_auto_switch", "quota_pre_check"]
+
+    for hook_type in ["AfterAgent", "BeforeAgent"]:
+        if hook_type not in settings["hooks"]:
+            continue
+        new_entries = []
+        for entry in settings["hooks"][hook_type]:
+            hooks = entry.get("hooks", [])
+            filtered = [
+                h for h in hooks
+                if h.get("name") not in target_names
+                and not any(ts in h.get("command", "") for ts in target_scripts)
+            ]
+            if filtered:
+                entry["hooks"] = filtered
+                new_entries.append(entry)
+            else:
+                modified = True
+        if new_entries != settings["hooks"].get(hook_type, []):
+            modified = True
+        settings["hooks"][hook_type] = new_entries
+
+    settings["hooks"] = {k: v for k, v in settings["hooks"].items() if v}
+    if not settings["hooks"]:
+        del settings["hooks"]
+        modified = True
+
+    if modified:
+        try:
+            with open(settings_file, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, indent=2, ensure_ascii=False)
+            print(f"    {UI.GREEN}{t('uninstall_cleaned_hooks')}{UI.RESET}")
+        except Exception as e:
+            print(f"    {UI.RED}[Error] Failed to update settings.json: {e}{UI.RESET}")
+    else:
+        print(f"    {UI.DIM}{t('uninstall_no_hooks')}{UI.RESET}")
+
+
+def _remove_env_var():
+    """Remove GEMINI_FORCE_FILE_STORAGE from user environment variables."""
+    if sys.platform != "win32":
+        return
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "[Environment]::SetEnvironmentVariable('GEMINI_FORCE_FILE_STORAGE', $null, 'User'); Write-Output 'Removed'"],
+            capture_output=True, text=True
+        )
+        if "Removed" in result.stdout:
+            print(f"    {UI.GREEN}{t('uninstall_removed_env')}{UI.RESET}")
+    except Exception as e:
+        print(f"    {UI.YELLOW}[Warning] Could not remove env var: {e}{UI.RESET}")
+
+
+def handle_uninstall(args):
+    """Uninstall Gemini CLI Auth Manager completely."""
+    force = "--force" in args or "-f" in args or "-y" in args
+    keep_accounts = "--keep-accounts" in args
+
+    UI.header()
+    print(f"\n  {UI.RED}{UI.BOLD}  {t('uninstall_title')}{UI.RESET}")
+    print(f"  {UI.line('-', 40)}")
+
+    files_to_remove = [
+        (GEMINI_DIR / "gemini_cli_auth_manager.py", "Core script"),
+        (GEMINI_DIR / "gchange.bat", "CLI launcher"),
+        (GEMINI_DIR / "restart_helper.py", "Restart helper"),
+        (GEMINI_DIR / "commands" / "change.toml", "Slash command"),
+        (GEMINI_DIR / "hooks" / "quota_auto_switch.py", "AfterAgent hook"),
+        (GEMINI_DIR / "hooks" / "quota_pre_check.py", "BeforeAgent hook"),
+        (GEMINI_DIR / "auth_config.json", "Config file"),
+    ]
+
+    print(f"\n  {UI.BOLD}{t('uninstall_files')}:{UI.RESET}")
+    for f, _desc in files_to_remove:
+        if f.exists():
+            print(f"    {UI.RED}✗{UI.RESET}  {f.name}")
+        else:
+            print(f"    {UI.DIM}—{UI.RESET}  {f.name} {UI.DIM}(not found){UI.RESET}")
+
+    if not keep_accounts:
+        has_data = PROFILES_DIR.exists() or ACCOUNTS_JSON.exists()
+        if has_data:
+            print(f"\n  {UI.YELLOW}{UI.BOLD}{t('uninstall_data')}:{UI.RESET}")
+            if PROFILES_DIR.exists():
+                print(f"    {UI.RED}✗{UI.RESET}  {PROFILES_DIR}")
+            if ACCOUNTS_JSON.exists():
+                print(f"    {UI.RED}✗{UI.RESET}  {ACCOUNTS_JSON}")
+
+    print(f"\n  {UI.BOLD}{t('uninstall_also')}:{UI.RESET}")
+    print(f"    · settings.json hooks")
+    print(f"    · GEMINI_FORCE_FILE_STORAGE variable")
+
+    if not force:
+        try:
+            confirm = input(f"\n  {UI.RED}{t('uninstall_proceed')}{UI.RESET}").strip().lower()
+            if confirm not in ["y", "yes", "是"]:
+                print(f"\n  {UI.DIM}{t('uninstall_cancelled')}{UI.RESET}\n")
+                return
+        except (EOFError, KeyboardInterrupt):
+            print(f"\n  {UI.DIM}{t('uninstall_cancelled')}{UI.RESET}\n")
+            return
+
+    print(f"\n  {UI.DIM}{t('uninstall_removing')}{UI.RESET}")
+
+    removed = 0
+    for f, _desc in files_to_remove:
+        if f.exists():
+            try:
+                if f.is_dir():
+                    shutil.rmtree(f)
+                else:
+                    f.unlink()
+                removed += 1
+                print(f"    {UI.GREEN}✓{UI.RESET}  {f.name}")
+            except OSError as e:
+                print(f"    {UI.RED}✗{UI.RESET}  {f.name} - {e}")
+
+    print(f"  {UI.GREEN}{t('uninstall_removed').format(removed)}{UI.RESET}")
+
+    if not keep_accounts:
+        if PROFILES_DIR.exists():
+            try:
+                shutil.rmtree(PROFILES_DIR)
+                print(f"    {UI.GREEN}✓{UI.RESET}  {t('uninstall_removed_profiles')}")
+            except OSError as e:
+                print(f"    {UI.RED}✗{UI.RESET}  {PROFILES_DIR} - {e}")
+        if ACCOUNTS_JSON.exists():
+            try:
+                ACCOUNTS_JSON.unlink()
+                print(f"    {UI.GREEN}✓{UI.RESET}  {t('uninstall_removed_tracking')}")
+            except OSError as e:
+                print(f"    {UI.RED}✗{UI.RESET}  {ACCOUNTS_JSON} - {e}")
+
+    _clean_settings_json()
+    _remove_env_var()
+
+    print(f"\n{UI.GREEN}{UI.line('=')}{UI.RESET}")
+    print(f"{UI.GREEN}  ✅ {t('uninstall_complete')}{UI.RESET}")
+    print(f"{UI.GREEN}{UI.line('=')}{UI.RESET}")
+    print(f"\n  {UI.DIM}{t('uninstall_restart')}{UI.RESET}\n")
+
+
 def _clear_screen():
     """Clear terminal screen."""
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -1038,6 +1237,8 @@ def main():
         handle_strategy(args)
     elif command == "config":
         handle_config(args)
+    elif command == "uninstall":
+        handle_uninstall(args)
     elif command in ["list", "-l"]:
         list_status()
     elif command in ["help", "-h", "--help"]:

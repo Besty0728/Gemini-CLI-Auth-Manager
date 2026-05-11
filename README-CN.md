@@ -68,6 +68,7 @@ export PATH="$HOME/.local/bin:$PATH"
 | `gchange <n>` | 快速切换到序号为 n 的账号 |
 | `gchange menu` | 进入交互式菜单（推荐） |
 | `gchange pool login` | 通过 OAuth 添加新账号 |
+| `gchange uninstall` | 一键卸载本工具 |
 
 ---
 
@@ -125,6 +126,35 @@ export PATH="$HOME/.local/bin:$PATH"
 - **⚡ 自动轮换**: 实现基于配额预检的自动账号切换。
 
 ---
+
+## 🗑 卸载
+
+一条命令即可清理所有安装文件：
+
+```bash
+# 交互式卸载（列出待删除项，确认后执行）
+gchange uninstall
+
+# 跳过确认直接卸载
+gchange uninstall --force
+
+# 卸载但保留账号数据（auth_profiles + google_accounts.json）
+gchange uninstall --keep-accounts
+```
+
+也可从源码目录直接卸载：
+
+```bash
+python install.py --uninstall
+```
+
+**卸载会清理的内容：**
+- 核心脚本、CLI 启动器、斜杠命令、钩子脚本、配置文件
+- `settings.json` 中的自动切换钩子（保留其他配置）
+- `GEMINI_FORCE_FILE_STORAGE` 环境变量
+- 账号数据（auth_profiles + google_accounts.json）— 使用 `--keep-accounts` 可保留
+
+> PATH 条目不会被移除，因为 `~/.gemini` 目录可能同时被 Gemini CLI 自身使用。
 
 ## ❤️ 贡献与反馈
 由 Besty 开发。欢迎提交 Issue 或 PR！
