@@ -178,8 +178,12 @@ def format_reset_time(reset_time_str):
 
 def display_quota_info(quota_response):
     """Display quota information in a formatted table."""
+    if not isinstance(quota_response, dict):
+        print("❌ No quota information available")
+        return None
+
     buckets = quota_response.get("buckets", [])
-    
+
     if not buckets:
         print("❌ No quota information available")
         return
